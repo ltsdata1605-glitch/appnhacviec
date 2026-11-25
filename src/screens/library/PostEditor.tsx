@@ -5,7 +5,7 @@ import { Cell, Group, Section, Switch } from '../../ui/controls';
 import { Icon, type IconName } from '../../ui/Icon';
 import { POST_CATEGORIES, ROLE_LABEL } from '../../lib/constants';
 import { api } from '../../lib/backend';
-import { savePost } from '../../lib/actions';
+import { saveErrorText, savePost } from '../../lib/actions';
 import { compressImageFile } from '../../lib/image';
 import { useActor } from '../shared';
 import { visibleTo } from './Library';
@@ -95,8 +95,8 @@ export function PostEditor({ close, post }: { close: () => void; post?: Post }) 
       await savePost(data, actor, recipients, !!post && bump);
       ui.toast({ text: post ? 'Đã cập nhật bài viết' : 'Đã đăng bài', icon: 'check', color: 'green' });
       close();
-    } catch {
-      ui.alert({ title: 'Chưa lưu được', message: 'Kiểm tra kết nối mạng rồi thử lại.' });
+    } catch (e) {
+      ui.alert({ title: 'Chưa lưu được', message: saveErrorText(e) });
     } finally {
       setBusy(false);
     }

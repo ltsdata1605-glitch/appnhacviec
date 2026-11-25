@@ -61,6 +61,19 @@ async function main() {
     await ctx.addInitScript(() => {
       localStorage.setItem('nv-install-dismissed', '1');
       window.__nvSoundLog = [];
+      // Giả lập lỗi iOS 26 (WebKit 315804): giao dịch ghi IndexedDB treo mãi không xong.
+      // App không được phụ thuộc vào việc ghi IndexedDB, nếu không mọi thao tác lưu sẽ treo.
+      window.__nvIdbWrites = [];
+      if (window.IDBDatabase) {
+        const orig = IDBDatabase.prototype.transaction;
+        IDBDatabase.prototype.transaction = function (names, mode, opts) {
+          if (mode !== 'readwrite') return orig.call(this, names, mode, opts);
+          window.__nvIdbWrites.push(`${this.name}:${names}`);
+          const req = () => ({ addEventListener() {}, removeEventListener() {}, result: undefined, error: null });
+          const store = new Proxy({}, { get: (_, k) => (k === 'name' ? String(names) : () => req()) });
+          return { objectStore: () => store, addEventListener() {}, removeEventListener() {}, abort() {}, commit() {}, db: this, mode, error: null };
+        };
+      }
     });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => problems.push(`[${key}] lỗi trang: ${e.message}`));
@@ -580,34 +593,38 @@ async function main() {
   await tab(C, 'Hôm nay');
   await C.locator('.quick button', { hasText: 'Kiểm quỹ' }).click();
   await C.waitForTimeout(900);
-  const key = (k) => C.locator('.keypad .key', { hasText: new RegExp(`^${k}$`) }).first().click();
-  await key('2');
-  await C.locator('.cash-tile', { hasText: '100.000' }).click();
-  await key('5');
-  await C.locator('.cash-tile', { hasText: 'Theo sổ' }).click();
-  await key('1');
-  await key('5');
-  await key('0');
-  await key('000');
+  const cf = (label, v) => C.getByLabel(label, { exact: true }).fill(v);
+  await cf('Số tờ 500.000', '2');
+  await cf('Số tờ 100.000', '5');
+  await cf('Số tiền theo sổ', '150000');
+  await cf('Số tờ 20.000', '3b');
+  check('Ô số tờ chỉ nhận chữ số', (await C.getByLabel('Số tờ 20.000', { exact: true }).inputValue()) === '3');
+  await cf('Số tờ 20.000', '');
+  const inp = await C.getByLabel('Số tờ 500.000', { exact: true }).evaluate((el) => ({ mode: el.inputMode, size: parseFloat(getComputedStyle(el).fontSize) }));
+  check('Dùng bàn phím số iPhone, chữ ≥16px (không tự phóng to)', inp.mode === 'numeric' && inp.size >= 16, JSON.stringify(inp));
   check('Kiểm quỹ: tổng tiền tự cộng (2×500k + 5×100k)', await has(C, '1.500.000'));
   check('Kiểm quỹ: đọc thành chữ', await has(C, 'Một triệu năm trăm nghìn đồng'));
   check('Kiểm quỹ: báo chênh lệch so với sổ', await has(C, 'Thừa 1.350.000'));
-  const fit = await C.evaluate(() => { const el = [...document.querySelectorAll('.scroll.fixed-body')].pop(); return el.scrollHeight <= el.clientHeight + 1; });
-  check('Kiểm quỹ vừa một màn hình, không cuộn', fit);
+  const fit = await C.evaluate(() => {
+    const el = [...document.querySelectorAll('.scroll.fixed-body')].pop();
+    const list = el.querySelector('.cash-list');
+    const note = el.querySelector('.cash-note').getBoundingClientRect();
+    return el.scrollHeight <= el.clientHeight + 1 && list.scrollHeight <= list.clientHeight + 1 && note.bottom <= innerHeight;
+  });
+  check('Kiểm quỹ vừa một màn hình: đủ 10 mệnh giá, số tờ và ghi chú, không cuộn', fit);
   await shot(C, 'cash');
-  await C.locator('.cash-actions .btn', { hasText: 'Lưu kiểm quỹ' }).click();
-  await C.waitForTimeout(800);
-  const ta = sheet(C).locator('textarea');
+  const ta = C.getByLabel('Ghi chú kiểm quỹ');
   await ta.click();
   await ta.type('@Lê Tr');
   await C.waitForTimeout(500);
   check('Gõ @ hiện danh sách gắn tên', await C.locator('.mention-item', { hasText: 'Lê Trường Sơn' }).isVisible());
   await C.locator('.mention-item', { hasText: 'Lê Trường Sơn' }).click();
   await ta.type('mượn 200.000');
-  check('Chọn tên chèn đầy đủ "@Lê Trường Sơn"', (await ta.inputValue()).startsWith('@Lê Trường Sơn mượn'));
-  await sheet(C).locator('.btn', { hasText: 'Lưu kiểm quỹ' }).click();
+  const noteVal = await ta.inputValue();
+  check('Chọn tên chèn đầy đủ "@Lê Trường Sơn"', noteVal.startsWith('@Lê Trường Sơn mượn'), JSON.stringify(noteVal));
+  await C.locator('.cash-actions .btn', { hasText: 'Lưu kiểm quỹ' }).click();
   await C.waitForTimeout(1500);
-  check('Lưu kiểm quỹ, máy đếm làm mới', await has(C, 'Đã lưu kiểm quỹ'));
+  check('Bấm Lưu là lưu ngay, máy đếm làm mới', (await has(C, 'Đã lưu kiểm quỹ')) && (await C.getByLabel('Số tờ 500.000', { exact: true }).inputValue()) === '');
   const adminUid = (await fsQuery('users', 'email', 'admin.son@test.vn'))[0].name.split('/').pop();
   const aNotes = await fsQuery('notifications', 'uid', adminUid);
   check('Người được gắn tên nhận thông báo "đã nhắc đến bạn"', aNotes.some((n) => /đã nhắc đến bạn/.test(n.fields.title.stringValue) && /mượn 200.000/.test(n.fields.body.stringValue)));
@@ -674,6 +691,15 @@ async function main() {
   check('Quản lý thấy tiến độ điểm danh theo người', (await has(A, 'Hoàn tất 1/')) && (await has(A, 'Nguyễn Thị Hoa')));
   await back(A);
 
+  sec('10. Lỗi treo khi lưu trên iPhone (iOS 26)');
+  // Đăng nhập (firebaseLocalStorageDb) và dữ liệu (firestore/...) không được ghi IndexedDB.
+  // Bộ đếm thống kê của Firebase (firebase-heartbeat-database) có ghi nhưng không ai chờ nó; bị treo vẫn chạy bình thường.
+  for (const [k, u] of Object.entries(users)) {
+    const w = await u.page.evaluate(() => window.__nvIdbWrites || []).catch(() => ['?']);
+    const bad = w.filter((x) => !x.startsWith('firebase-heartbeat-database'));
+    check(`${k}: đăng nhập và lưu dữ liệu không cần ghi IndexedDB`, bad.length === 0, bad.slice(0, 3).join(', '));
+  }
+
   await browser.close();
 
   // ---------------- Tổng kết ----------------
@@ -690,6 +716,7 @@ async function main() {
 main().catch(async (e) => {
   console.error('DỪNG GIỮA CHỪNG:', e.message.split('\n').slice(0, 3).join(' | '));
   if (SHOTS) for (const [k, u] of Object.entries(users)) await u.page.screenshot({ path: `${SHOTS}/fail-${k.replace(/\s+/g, '_')}.png` }).catch(() => {});
+  for (const [k, u] of Object.entries(users)) console.log(`  idb[${k}]`, JSON.stringify(await u.page.evaluate(() => window.__nvIdbWrites).catch(() => '?')));
   const pass = results.filter((r) => r.ok).length;
   console.log(`Đã chạy ${results.length} bước, ${pass} đạt trước khi dừng.`);
   [...new Set(problems)].slice(0, 20).forEach((p) => console.log('  ! ' + p));

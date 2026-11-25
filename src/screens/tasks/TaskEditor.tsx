@@ -5,7 +5,7 @@ import { Cell, Group, Section, Segmented, Switch } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { PRIORITY_LABEL, REMIND_OPTIONS, SCOPE_LABEL } from '../../lib/constants';
 import { addDays, fromInputs, vnDate, vnTime, now, WEEKDAY_SHORT } from '../../lib/time';
-import { createTasks, saveTemplate, updateTaskFields } from '../../lib/actions';
+import { createTasks, saveErrorText, saveTemplate, updateTaskFields } from '../../lib/actions';
 import { generateForToday } from '../../lib/recurring';
 import { api } from '../../lib/backend';
 import { PersonPicker, useActor } from '../shared';
@@ -49,6 +49,7 @@ export function TaskEditor({ close, task, template, forceRepeat, presetAssignee 
   const [repeat, setRepeat] = useState<Recurrence['type'] | 'none'>(template ? template.recurrence.type : forceRepeat ? 'daily' : 'none');
   const [repeatDays, setRepeatDays] = useState<number[]>(template?.recurrence.days || [1, 2, 3, 4, 5, 6, 7]);
   const [busy, setBusy] = useState(false);
+  const [idSeed] = useState(() => api().newId());
 
   const canBroad = s.can('assign'); // giao cho bộ phận / hãng / toàn siêu thị, việc lặp lại
   const canRepeat = !editing && canBroad;
@@ -127,6 +128,7 @@ export function TaskEditor({ close, task, template, forceRepeat, presetAssignee 
             requirePhoto,
             requireApproval,
             completionMode: each ? 'each' : 'any',
+            idSeed,
           },
           store.code,
           actor,
@@ -137,7 +139,7 @@ export function TaskEditor({ close, task, template, forceRepeat, presetAssignee 
       close();
     } catch (e) {
       console.error(e);
-      ui.alert({ title: 'Chưa lưu được', message: 'Kiểm tra kết nối mạng rồi thử lại.' });
+      ui.alert({ title: 'Chưa lưu được', message: saveErrorText(e) });
     } finally {
       setBusy(false);
     }

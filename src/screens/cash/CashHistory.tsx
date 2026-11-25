@@ -181,8 +181,13 @@ export function CashDetailScreen({ id }: { id: string }) {
         </>
       }
     >
-      <div style={{ padding: '4px 20px 0' }}>
-        <div className="t-foot c2">{stamp(c.createdAt)}</div>
+      <div style={{ padding: '2px 20px 0' }}>
+        <div className="row gap8">
+          <Avatar name={c.createdByName} src={by?.photoURL} size={22} />
+          <div className="t-foot c2 ellipsis">
+            {c.createdByName} · {stamp(c.createdAt)}
+          </div>
+        </div>
         <div className="t-large tnum" style={{ marginTop: 4 }}>
           {fmt(c.total)}
           <span className="t-title3 c2"> đ</span>
@@ -195,37 +200,39 @@ export function CashDetailScreen({ id }: { id: string }) {
           )}
         </div>
       </div>
-      <Section title="Chi tiết" small>
-        <Group>
+      <div style={{ padding: '14px calc(16px + var(--safe-right)) 0 calc(16px + var(--safe-left))' }}>
+        <div className="cash-list static">
           {rows.map((x) => (
-            <Cell
-              key={x}
-              leading={
-                <span className="cash-den" style={{ background: DENOM_STYLE[x].bg, color: DENOM_STYLE[x].fg, minWidth: 92, textAlign: 'center' }}>
-                  {fmt(x)}
-                </span>
-              }
-              sepInset={16}
-              title={<span className="c2 tnum">× {c.counts[String(x)]}</span>}
-              detail={<span className="tnum" style={{ color: 'var(--label)' }}>{fmt(x * c.counts[String(x)])}</span>}
-            />
+            <div className="cash-row" key={x}>
+              <span className="cash-den" style={{ background: DENOM_STYLE[x].bg, color: DENOM_STYLE[x].fg }}>
+                {fmt(x)}
+              </span>
+              <span className="cash-cnt-v tnum">× {c.counts[String(x)]}</span>
+              <span className="cash-v tnum">{fmt(x * c.counts[String(x)])}</span>
+            </div>
           ))}
-          {c.other > 0 && <Cell title="Tiền khác" detail={<span className="tnum">{fmt(c.other)}</span>} />}
-          {c.expected !== null && c.expected !== undefined && <Cell title="Theo sổ / hệ thống" detail={<span className="tnum">{fmt(c.expected)}</span>} />}
-        </Group>
-      </Section>
-      {c.note && (
-        <Section title="Ghi chú" small>
-          <div className="card t-body">
+          {c.other > 0 && (
+            <div className="cash-row">
+              <span className="cash-lbl">Tiền khác</span>
+              <span className="cash-v tnum">{fmt(c.other)}</span>
+            </div>
+          )}
+          {c.expected !== null && c.expected !== undefined && (
+            <div className="cash-row">
+              <span className="cash-lbl tint">Theo sổ</span>
+              <span className="cash-v tnum c2">{fmt(c.expected)}</span>
+            </div>
+          )}
+        </div>
+        {c.note && (
+          <div className="card t-body" style={{ marginTop: 10, padding: '10px 14px' }}>
+            <span className="t-foot c2 semibold" style={{ display: 'block', marginBottom: 2 }}>
+              Ghi chú
+            </span>
             <MentionText text={c.note} />
           </div>
-        </Section>
-      )}
-      <Section>
-        <Group>
-          <Cell leading={<Avatar name={c.createdByName} src={by?.photoURL} size={34} />} sepInset={62} title={c.createdByName} sub="Người kiểm" />
-        </Group>
-      </Section>
+        )}
+      </div>
     </Page>
   );
 }

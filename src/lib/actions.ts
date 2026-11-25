@@ -230,6 +230,16 @@ export interface TaskInput {
   requireApproval: boolean;
   completionMode: CompletionMode;
   templateId?: string | null;
+  /** mã cố định cho mỗi lần mở trình soạn → bấm lại khi mạng chậm không tạo việc trùng */
+  idSeed?: string;
+}
+
+/** Lời nhắn lỗi khi lưu không thành công */
+export function saveErrorText(e: unknown): string {
+  const code = (e as { code?: string })?.code || '';
+  if (code === 'timeout') return 'Mạng đang chậm nên máy chủ chưa xác nhận. Bấm lưu lại để gửi tiếp, app không tạo trùng.';
+  if (code.includes('permission-denied')) return 'Tài khoản của bạn chưa có quyền làm việc này. Liên hệ quản lý để được cấp quyền.';
+  return 'Kiểm tra kết nối mạng rồi thử lại.';
 }
 
 function activity(type: Activity['type'], by: Actor, note?: string): Activity {
@@ -264,20 +274,20 @@ export async function createTasks(input: TaskInput, storeCode: string, by: Actor
   const ops: BatchOp[] = [];
   let recipients: string[] = [];
   if (input.scope === 'personal') {
-    const groupId = input.assigneeUids.length > 1 ? api().newId() : null;
+    const groupId = input.assigneeUids.length > 1 ? input.idSeed || api().newId() : null;
     for (const uid of input.assigneeUids) {
       const m = members.find((x) => x.uid === uid);
       ops.push({
         type: 'set',
         col: 'tasks',
-        id: api().newId(),
+        id: input.idSeed ? `${input.idSeed}_${uid.slice(0, 8)}` : api().newId(),
         data: { ...base, shared: false, scope: 'personal', assigneeUid: uid, assigneeName: m?.fullName || '', groupId, department: null, brand: null },
       });
     }
     recipients = input.assigneeUids;
   } else {
     const data = { ...base, shared: true, scope: input.scope, assigneeUid: null, assigneeName: null, department: input.scope === 'department' ? input.department : null, brand: input.scope === 'brand' ? input.brand : null };
-    ops.push({ type: 'set', col: 'tasks', id: api().newId(), data });
+    ops.push({ type: 'set', col: 'tasks', id: input.idSeed || api().newId(), data });
     recipients = members.filter((m) => m.status === 'active' && isActor(data as unknown as Task, m)).map((m) => m.uid);
   }
   await api().batch(ops);
@@ -548,16 +558,16 @@ export interface HandoverItem {
   urgent: boolean;
 }
 
-export async function submitHandover(storeCode: string, by: Actor, shift: string, items: HandoverItem[], members: UserProfile[], dueAt: number) {
+export async function submitHandover(storeCode: string, by: Actor, shift: string, items: HandoverItem[], members: UserProfile[], dueAt: number, seed?: string) {
   const t = now();
-  const handoverId = api().newId();
+  const handoverId = seed || api().newId();
   const handover = { id: handoverId, shift, fromUid: by.uid, fromName: by.name, at: t };
   const ops: BatchOp[] = [];
   const notes: { uids: string[]; title: string; body: string; link: string; level: NotifyLevel }[] = [];
   for (const it of items) {
     const text = it.text.trim();
     if (!text) continue;
-    const id = api().newId();
+    const id = seed ? `${seed}_${items.indexOf(it)}` : api().newId();
     const personal = it.target.type === 'person';
     const m = personal ? members.find((x) => x.uid === it.target.value) : undefined;
     const data = {
@@ -624,10 +634,10 @@ export function rollcallDone(rc: Rollcall, uid: string): boolean {
   return !!rc.progress?.[uid]?.doneAt;
 }
 
-export async function saveRollcall(rc: Partial<Rollcall> & { storeCode: string }, by: Actor, members: UserProfile[]) {
+export async function saveRollcall(rc: Partial<Rollcall> & { storeCode: string }, by: Actor, members: UserProfile[], newId?: string) {
   const t = now();
   const isNew = !rc.id;
-  const id = rc.id || api().newId();
+  const id = rc.id || newId || api().newId();
   const data = {
     media: [],
     items: [],

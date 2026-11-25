@@ -1,45 +1,122 @@
-// Kiểm quỹ: một màn hình, không cuộn, bàn phím số riêng (không bật bàn phím hệ thống → không zoom, chỉ nhập số).
-import { useEffect, useMemo, useState } from 'react';
+// Kiểm quỹ: mệnh giá xếp dọc, vừa một màn hình (không cuộn), nhập bằng bàn phím số của iPhone.
+// Ô nhập cỡ chữ 17px → iPhone không tự phóng to; chỉ nhận chữ số.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession, useStoreData } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
-import { useUI, SheetHead } from '../../ui/Overlay';
-import { Group, Section } from '../../ui/controls';
+import { useUI } from '../../ui/Overlay';
 import { Icon } from '../../ui/Icon';
 import { MentionInput } from '../../ui/Mention';
-import { DENOMS, DENOM_STYLE, fmt, toWords } from '../../lib/money';
+import { DENOMS, DENOM_STYLE, fmt, onlyDigits, toWords } from '../../lib/money';
 import { cashImage, cashText, shareImage, shareText } from '../../lib/cashExport';
-import { saveCashCount } from '../../lib/actions';
+import { saveCashCount, saveErrorText } from '../../lib/actions';
 import { extractMentions } from '../../lib/mentions';
 import { dm, now, vnMinutesOfDay, vnTime } from '../../lib/time';
 import { shortName } from '../../lib/text';
 import { useActor } from '../shared';
 import { CashHistoryScreen } from './CashHistory';
 
-const OTHER = 10;
-const EXPECTED = 11;
 const MAX_COUNT = 9999;
 const MAX_MONEY = 99_999_999_999;
+const SHIFTS = ['Ca sáng', 'Ca chiều', 'Ca tối', 'Bàn giao ca', 'Nộp tiền'];
 
 interface Draft {
   counts: number[];
   other: number;
   expected: number | null;
+  note: string;
+  shift: string | null; // null = tự theo giờ
 }
 
-const empty = (): Draft => ({ counts: DENOMS.map(() => 0), other: 0, expected: null });
+const empty = (): Draft => ({ counts: DENOMS.map(() => 0), other: 0, expected: null, note: '', shift: null });
 
-function shiftName(): string {
+function autoShift(): string {
   const m = vnMinutesOfDay();
-  const shift = m < 12 * 60 ? 'Ca sáng' : m < 17 * 60 + 30 ? 'Ca chiều' : 'Ca tối';
-  return `${shift} ${dm(now())}`;
+  return m < 12 * 60 ? 'Ca sáng' : m < 17 * 60 + 30 ? 'Ca chiều' : 'Ca tối';
+}
+
+/** Khi bàn phím iPhone mở: thu app vào phần màn hình còn nhìn thấy để ô đang nhập không bị che, thanh tiêu đề không bị đẩy lên. */
+function useKeyboardFit() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    const apply = () => {
+      const full = Math.max(root.clientHeight, window.innerHeight);
+      const isOpen = full - vv.height > 120;
+      root.classList.toggle('kb-fit', isOpen);
+      if (isOpen) {
+        root.style.setProperty('--vv-top', `${Math.max(0, vv.offsetTop)}px`);
+        root.style.setProperty('--vv-h', `${vv.height}px`);
+      } else {
+        root.style.removeProperty('--vv-top');
+        root.style.removeProperty('--vv-h');
+        if (window.scrollY) window.scrollTo(0, 0);
+      }
+      setOpen(isOpen);
+      if (isOpen) {
+        const el = document.activeElement as HTMLElement | null;
+        if (el?.closest('.cash-list')) requestAnimationFrame(() => el.closest('.cash-row')?.scrollIntoView({ block: 'nearest' }));
+      }
+    };
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    apply();
+    return () => {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+      root.classList.remove('kb-fit');
+      root.style.removeProperty('--vv-top');
+      root.style.removeProperty('--vv-h');
+    };
+  }, []);
+  return open;
+}
+
+/** Ô nhập số: bàn phím số iPhone, chỉ nhận chữ số, chạm vào là chọn hết để gõ đè nhanh */
+function NumField({ value, onChange, money, label, placeholder }: { value: number | null; onChange: (v: number | null) => void; money?: boolean; label: string; placeholder?: string }) {
+  const max = money ? MAX_MONEY : MAX_COUNT;
+  return (
+    <input
+      className={`cash-in tnum${money ? ' money' : ''}`}
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      autoComplete="off"
+      autoCorrect="off"
+      spellCheck={false}
+      enterKeyHint="next"
+      aria-label={label}
+      placeholder={placeholder ?? '0'}
+      value={value ? (money ? fmt(value) : String(value)) : ''}
+      onChange={(e) => {
+        const digits = onlyDigits(e.target.value).replace(/^0+/, '').slice(0, money ? 11 : 4);
+        onChange(digits ? Math.min(max, Number(digits)) : null);
+      }}
+      onFocus={(e) => {
+        const el = e.currentTarget;
+        if (document.documentElement.classList.contains('kb-fit')) el.closest('.cash-row')?.scrollIntoView({ block: 'nearest' });
+        setTimeout(() => {
+          try {
+            el.setSelectionRange(0, el.value.length);
+          } catch {
+            /* bỏ qua */
+          }
+        }, 0);
+      }}
+    />
+  );
 }
 
 export function CashCountScreen() {
   const s = useSession();
+  const d = useStoreData();
   const ui = useUI();
   const nav = useNav();
   const actor = useActor();
+  const kb = useKeyboardFit();
+  const listRef = useRef<HTMLDivElement>(null);
   const key = `nv-cash-draft-${s.storeCode}-${actor.uid}`;
   const [draft, setDraft] = useState<Draft>(() => {
     try {
@@ -50,8 +127,7 @@ export function CashCountScreen() {
     }
     return empty();
   });
-  const [sel, setSel] = useState(0);
-  const [fresh, setFresh] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   // Lưu nháp để mở lại không mất số đang kiểm
   useEffect(() => {
@@ -62,109 +138,72 @@ export function CashCountScreen() {
     }
   }, [draft, key]);
 
-  const total = useMemo(() => DENOMS.reduce((sum, d, i) => sum + d * draft.counts[i], 0) + draft.other, [draft]);
+  const total = useMemo(() => DENOMS.reduce((sum, x, i) => sum + x * draft.counts[i], 0) + draft.other, [draft]);
   const sheets = draft.counts.reduce((a, b) => a + b, 0);
   const diff = draft.expected === null ? null : total - draft.expected;
-  const isMoney = sel >= OTHER;
-  const valueOf = (i: number) => (i < OTHER ? draft.counts[i] : i === OTHER ? draft.other : draft.expected ?? 0);
+  const shift = draft.shift || autoShift();
 
-  const setValue = (i: number, v: number) =>
-    setDraft((d) => {
-      if (i < OTHER) {
-        const counts = [...d.counts];
-        counts[i] = Math.max(0, Math.min(MAX_COUNT, v));
-        return { ...d, counts };
-      }
-      if (i === OTHER) return { ...d, other: Math.max(0, Math.min(MAX_MONEY, v)) };
-      return { ...d, expected: v === 0 && d.expected === null ? null : Math.max(0, Math.min(MAX_MONEY, v)) };
+  const setCount = (i: number, v: number | null) =>
+    setDraft((x) => {
+      const counts = [...x.counts];
+      counts[i] = v || 0;
+      return { ...x, counts };
     });
 
-  const select = (i: number) => {
-    setSel(i);
-    setFresh(true);
-  };
-
-  const press = (k: string) => {
-    const cur = valueOf(sel);
-    if (/^\d+$/.test(k)) {
-      const base = fresh ? '' : String(cur);
-      const next = Number((base + k).replace(/^0+(?=\d)/, '')) || 0;
-      if (sel < OTHER ? next <= MAX_COUNT : next <= MAX_MONEY) setValue(sel, next);
-      setFresh(false);
-    } else if (k === 'back') {
-      setValue(sel, Math.floor(cur / 10));
-      setFresh(false);
-    } else if (k === 'clear') {
-      if (sel === EXPECTED) setDraft((d) => ({ ...d, expected: null }));
-      else setValue(sel, 0);
-      setFresh(true);
-    } else if (k === 'minus') {
-      setValue(sel, cur - 1);
-      setFresh(true);
-    } else if (k === 'plus') {
-      setValue(sel, cur + 1);
-      setFresh(true);
-    } else if (k === 'next') {
-      select((sel + 1) % 12);
-    }
-  };
-
   const reset = async () => {
-    if (total === 0 && draft.expected === null) return;
+    if (total === 0 && draft.expected === null && !draft.note) return;
     if (await ui.confirm('Làm lần kiểm mới?', 'Các số đang nhập sẽ bị xoá.', 'Làm mới', true)) {
       setDraft(empty());
-      select(0);
+      listRef.current?.scrollTo(0, 0);
     }
   };
 
-  const record = (name: string, note = '') => ({
+  const pickShift = async () => {
+    const v = await ui.actions(
+      SHIFTS.map((x) => ({ label: x, value: x, icon: x === shift ? 'check' : undefined })),
+      'Tên lần kiểm',
+    );
+    if (v) setDraft((x) => ({ ...x, shift: v }));
+  };
+
+  const record = () => ({
     storeCode: s.storeCode!,
-    name,
-    counts: Object.fromEntries(DENOMS.map((d, i) => [String(d), draft.counts[i]]).filter(([, n]) => n)) as Record<string, number>,
+    name: `${shift} ${dm(now())} · ${shortName(s.profile?.fullName || actor.name)}`.trim(),
+    counts: Object.fromEntries(DENOMS.map((x, i) => [String(x), draft.counts[i]]).filter(([, n]) => n)) as Record<string, number>,
     other: draft.other,
     total,
     sheets,
     expected: draft.expected,
     diff,
-    note,
+    note: draft.note.trim(),
     createdByName: actor.name,
   });
 
   const share = async () => {
-    const r = await shareText(cashText(record(shiftName())));
+    const r = await shareText(cashText(record()));
     if (r === 'copied') ui.toast({ text: 'Đã sao chép, dán vào Zalo để gửi', icon: 'check', color: 'green' });
   };
 
   const image = async () => {
-    const blob = await cashImage({ ...record(shiftName()), storeName: s.store?.name });
+    const blob = await cashImage({ ...record(), storeName: s.store?.name });
     await shareImage(blob, `kiem-quy-${Date.now()}.png`);
   };
 
-  const save = () =>
-    ui.sheet(
-      (close) => (
-        <SaveSheet
-          close={close}
-          total={total}
-          sheets={sheets}
-          expected={draft.expected}
-          diff={diff}
-          onSave={async (name, note, mentions) => {
-            await saveCashCount({ ...record(name, note), mentions, createdBy: actor.uid });
-            setDraft(empty());
-            select(0);
-            ui.toast({ text: `Đã lưu kiểm quỹ lúc ${vnTime(now())}`, icon: 'check', color: 'green' });
-          }}
-        />
-      ),
-      { auto: true },
-    );
-
-  const tiles = [
-    ...DENOMS.map((d, i) => ({ i, label: fmt(d), style: DENOM_STYLE[d], value: draft.counts[i], sub: draft.counts[i] ? fmt(d * draft.counts[i]) : '' })),
-    { i: OTHER, label: 'Tiền khác', style: { bg: 'var(--fill-3)', fg: 'var(--label)' }, value: draft.other, sub: 'xu, tiền lẻ' },
-    { i: EXPECTED, label: 'Theo sổ', style: { bg: 'color-mix(in srgb, var(--tint) 14%, transparent)', fg: 'var(--tint)' }, value: draft.expected, sub: 'để đối chiếu' },
-  ];
+  const save = async () => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    setBusy(true);
+    try {
+      const r = record();
+      await saveCashCount({ ...r, mentions: extractMentions(r.note, d.active), createdBy: actor.uid });
+      setDraft(empty());
+      listRef.current?.scrollTo(0, 0);
+      ui.toast({ text: `Đã lưu kiểm quỹ lúc ${vnTime(now())}`, icon: 'check', color: 'green' });
+    } catch (e) {
+      ui.alert({ title: 'Chưa lưu được', message: `${saveErrorText(e)} Số liệu vẫn được giữ trên máy.` });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Page
@@ -176,17 +215,23 @@ export function CashCountScreen() {
           <button className="glass-btn icon" aria-label="Làm lần kiểm mới" onClick={reset}>
             <Icon name="retake" size={20} />
           </button>
-          <button className="glass-btn" onClick={() => nav.push(<CashHistoryScreen />)}>
+          <button className="glass-btn" aria-label="Lịch sử" onClick={() => nav.push(<CashHistoryScreen />)}>
             <Icon name="clock" size={18} />
-            Lịch sử
+            <span className="glass-label">Lịch sử</span>
           </button>
         </>
       }
     >
-      <div className="cash">
+      <div className={`cash${kb ? ' kb' : ''}`}>
         <div className="cash-sum">
           <div className="grow" style={{ minWidth: 0 }}>
-            <div className="t-foot c2 semibold">Tổng tiền thực tế</div>
+            <div className="cash-sum-head">
+              <span className="t-foot c2 semibold">Tổng tiền thực tế</span>
+              <button className="cash-shift" onClick={pickShift} aria-label="Đổi tên lần kiểm">
+                {shift}
+                <Icon name="chevronDown" size={13} stroke={2.6} />
+              </button>
+            </div>
             <div className="cash-total tnum">
               {fmt(total)}
               <span> đ</span>
@@ -203,32 +248,38 @@ export function CashCountScreen() {
           </div>
         </div>
 
-        <div className="cash-grid">
-          {tiles.map((t) => (
-            <button key={t.i} className={`cash-tile${sel === t.i ? ' on' : ''}`} onClick={() => select(t.i)} aria-pressed={sel === t.i}>
-              <span className="cash-den" style={{ background: t.style.bg, color: t.style.fg }}>
-                {t.label}
+        <div className="cash-list" ref={listRef}>
+          {DENOMS.map((x, i) => (
+            <label className="cash-row" key={x}>
+              <span className="cash-den" style={{ background: DENOM_STYLE[x].bg, color: DENOM_STYLE[x].fg }}>
+                {fmt(x)}
               </span>
-              <span className={`cash-cnt tnum${t.i >= OTHER ? ' money' : ''}${t.value ? '' : ' zero'}`}>
-                {t.i >= OTHER ? (t.value === null ? '—' : fmt(t.value)) : t.value}
-              </span>
-              <span className="cash-sub tnum">{t.sub}</span>
-            </button>
+              <span className="cash-x">×</span>
+              <NumField value={draft.counts[i]} onChange={(v) => setCount(i, v)} label={`Số tờ ${fmt(x)}`} />
+              <span className={`cash-amt tnum${draft.counts[i] ? '' : ' zero'}`}>{draft.counts[i] ? fmt(x * draft.counts[i]) : '0'}</span>
+            </label>
           ))}
+          <label className="cash-row">
+            <span className="cash-lbl">Tiền khác</span>
+            <NumField money value={draft.other} onChange={(v) => setDraft((x) => ({ ...x, other: v || 0 }))} label="Tiền khác" placeholder="Xu, tiền lẻ…" />
+          </label>
+          <label className="cash-row">
+            <span className="cash-lbl tint">Theo sổ</span>
+            <NumField money value={draft.expected} onChange={(v) => setDraft((x) => ({ ...x, expected: v }))} label="Số tiền theo sổ" placeholder="Nhập để đối chiếu" />
+          </label>
         </div>
 
-        <div className="keypad" role="group" aria-label="Bàn phím số">
-          {['1', '2', '3', 'back', '4', '5', '6', 'minus', '7', '8', '9', 'plus', isMoney ? '000' : '00', '0', 'clear', 'next'].map((k) => (
-            <button
-              key={k}
-              className={`key${/^\d+$/.test(k) ? '' : ' fn'}${k === 'next' ? ' next' : ''}`}
-              onClick={() => press(k)}
-              disabled={isMoney && (k === 'minus' || k === 'plus')}
-              aria-label={k === 'back' ? 'Xoá một số' : k === 'minus' ? 'Bớt 1 tờ' : k === 'plus' ? 'Thêm 1 tờ' : k === 'clear' ? 'Xoá ô' : k === 'next' ? 'Ô tiếp theo' : k}
-            >
-              {k === 'back' ? <Icon name="chevronLeft" size={22} stroke={2.4} /> : k === 'minus' ? '−1' : k === 'plus' ? '+1' : k === 'clear' ? 'C' : k === 'next' ? <>Tiếp <Icon name="chevronRight" size={16} stroke={2.6} /></> : k}
-            </button>
-          ))}
+        <div className="cash-note">
+          <Icon name="pencil" size={17} />
+          <MentionInput
+            value={draft.note}
+            onChange={(v) => setDraft((x) => ({ ...x, note: v }))}
+            placeholder="Ghi chú · gõ @ để gắn tên người mượn"
+            ariaLabel="Ghi chú kiểm quỹ"
+            className="cash-note-in"
+            enterKeyHint="done"
+            onEnter={() => (document.activeElement as HTMLElement | null)?.blur()}
+          />
         </div>
 
         <div className="cash-actions">
@@ -240,96 +291,18 @@ export function CashCountScreen() {
             <Icon name="photo" size={19} />
             Ảnh
           </button>
-          <button className="btn md grow" onClick={save} disabled={total === 0}>
-            <Icon name="check" size={19} stroke={2.4} />
-            Lưu kiểm quỹ
+          <button className="btn md grow" onClick={save} disabled={total === 0 || busy}>
+            {busy ? (
+              <span className="spinner" style={{ borderTopColor: '#fff' }} />
+            ) : (
+              <>
+                <Icon name="check" size={19} stroke={2.4} />
+                Lưu kiểm quỹ
+              </>
+            )}
           </button>
         </div>
       </div>
     </Page>
-  );
-}
-
-function SaveSheet({
-  close,
-  total,
-  sheets,
-  expected,
-  diff,
-  onSave,
-}: {
-  close: () => void;
-  total: number;
-  sheets: number;
-  expected: number | null;
-  diff: number | null;
-  onSave: (name: string, note: string, mentions: string[]) => Promise<void>;
-}) {
-  const d = useStoreData();
-  const s = useSession();
-  const ui = useUI();
-  const [name, setName] = useState(`${shiftName()} · ${shortName(s.profile?.fullName || '')}`.trim());
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const quick = ['Ca sáng', 'Ca chiều', 'Ca tối', 'Bàn giao ca', 'Nộp tiền'];
-
-  return (
-    <>
-      <SheetHead title="Lưu kiểm quỹ" onCancel={close} />
-      <div className="sheet-body" style={{ paddingBottom: 'calc(var(--safe-bottom) + 16px)' }}>
-        <Section small>
-          <Group>
-            <div className="cell" style={{ ['--sep-inset' as string]: '16px' }}>
-              <div className="cell-body">
-                <div className="t-foot c2">Tổng tiền thực tế · {sheets} tờ</div>
-                <div className="t-title2 tnum">{fmt(total)} đ</div>
-              </div>
-              {diff !== null && (
-                <span className={`pill tnum ${diff === 0 ? 'green' : diff > 0 ? 'orange' : 'red'}`}>
-                  {diff === 0 ? 'Khớp sổ' : diff > 0 ? `Thừa ${fmt(diff)}` : `Thiếu ${fmt(-diff)}`}
-                </span>
-              )}
-            </div>
-            {expected !== null && <div className="cell"><div className="cell-body t-sub c2">Theo sổ / hệ thống</div><div className="t-sub tnum">{fmt(expected)}</div></div>}
-          </Group>
-        </Section>
-        <Section title="Tên lần kiểm" small>
-          <Group>
-            <input className="textarea" style={{ minHeight: 0, height: 52 }} value={name} onChange={(e) => setName(e.target.value)} enterKeyHint="done" aria-label="Tên lần kiểm" />
-          </Group>
-          <div className="row gap6 wrap" style={{ marginTop: 8 }}>
-            {quick.map((q) => (
-              <button key={q} className="chip" onClick={() => setName(`${q} ${dm(now())} · ${shortName(s.profile?.fullName || '')}`.trim())}>
-                {q}
-              </button>
-            ))}
-          </div>
-        </Section>
-        <Section title="Ghi chú" small footer="Gõ @ để gắn tên người mượn tiền hoặc người liên quan. Người được gắn tên sẽ nhận thông báo.">
-          <Group>
-            <MentionInput multiline rows={3} className="textarea" value={note} onChange={setNote} placeholder="Ví dụ: @Nguyễn Văn A mượn 200.000" />
-          </Group>
-        </Section>
-        <div style={{ padding: '18px 16px 0' }}>
-          <button
-            className="btn block"
-            disabled={busy || !name.trim()}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await onSave(name.trim(), note.trim(), extractMentions(note, d.active));
-                close();
-              } catch {
-                ui.alert({ title: 'Chưa lưu được', message: 'Kiểm tra kết nối mạng rồi thử lại. Số liệu vẫn được giữ trên máy.' });
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? <span className="spinner" style={{ borderTopColor: '#fff' }} /> : 'Lưu kiểm quỹ'}
-          </button>
-        </div>
-      </div>
-    </>
   );
 }

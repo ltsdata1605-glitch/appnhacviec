@@ -6,7 +6,8 @@ import { useUI, SheetHead } from '../../ui/Overlay';
 import { Section } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { MentionInput } from '../../ui/Mention';
-import { submitHandover, type HandoverItem } from '../../lib/actions';
+import { saveErrorText, submitHandover, type HandoverItem } from '../../lib/actions';
+import { api } from '../../lib/backend';
 import { addDays, dm, now, vnAt, vnDate, vnMinutesOfDay } from '../../lib/time';
 import { PersonPicker, useActor } from '../shared';
 
@@ -39,6 +40,7 @@ export function HandoverSheet({ close }: { close: () => void }) {
   const [items, setItems] = useState<HandoverItem[]>([{ text: '', target: { type: 'department', value: defaultDept }, urgent: false }]);
   const [due, setDue] = useState<Due>('shift');
   const [busy, setBusy] = useState(false);
+  const [seed] = useState(() => api().newId());
   const valid = items.filter((i) => i.text.trim().length >= 3);
 
   const update = (k: number, p: Partial<HandoverItem>) => setItems((list) => list.map((x, i) => (i === k ? { ...x, ...p } : x)));
@@ -73,11 +75,11 @@ export function HandoverSheet({ close }: { close: () => void }) {
   const submit = async () => {
     setBusy(true);
     try {
-      const n = await submitHandover(store.code, actor, `${shift} ${dm(now())}`, valid, d.active, dueAt());
+      const n = await submitHandover(store.code, actor, `${shift} ${dm(now())}`, valid, d.active, dueAt(), seed);
       ui.toast({ text: `Đã bàn giao ${n} việc. Về an toàn nhé!`, icon: 'check', color: 'green' });
       close();
-    } catch {
-      ui.alert({ title: 'Chưa bàn giao được', message: 'Kiểm tra kết nối mạng rồi thử lại.' });
+    } catch (e) {
+      ui.alert({ title: 'Chưa bàn giao được', message: saveErrorText(e) });
     } finally {
       setBusy(false);
     }

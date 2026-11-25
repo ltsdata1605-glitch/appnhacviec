@@ -1,5 +1,5 @@
 // Ô nhập có gắn tên @ (giống Zalo/Line): gõ "@" để hiện danh sách nhân viên, PG trong kho.
-import { useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSession, useStoreData } from '../state/session';
 import { candidatesOf, filterCandidates, mentionQuery, splitMentions, type MentionCandidate } from '../lib/mentions';
 import { Avatar } from './controls';
@@ -27,6 +27,17 @@ export function MentionInput({ value, onChange, placeholder, multiline, rows = 3
   const [q, setQ] = useState<{ start: number; query: string } | null>(null);
   const all = useMemo(() => candidatesOf(d.active, s.auth?.uid), [d.active, s.auth?.uid]);
   const list = q ? filterCandidates(all, q.query) : [];
+  // Đặt con trỏ ngay sau tên vừa chèn, đồng bộ trước lần gõ phím kế tiếp (không dùng requestAnimationFrame
+  // vì khung hình có thể đến trễ và kéo con trỏ ngược lại giữa chừng khi đang gõ).
+  const caret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (caret.current === null || !el) return;
+    const p = caret.current;
+    caret.current = null;
+    if (document.activeElement !== el) el.focus();
+    el.setSelectionRange(p, p);
+  }, [value]);
 
   const sync = (el: HTMLTextAreaElement | HTMLInputElement) => {
     setQ(mentionQuery(el.value, el.selectionStart ?? el.value.length));
@@ -35,15 +46,11 @@ export function MentionInput({ value, onChange, placeholder, multiline, rows = 3
   const pick = (c: MentionCandidate) => {
     const el = ref.current;
     if (!el || !q) return;
-    const caret = el.selectionStart ?? value.length;
-    const next = `${value.slice(0, q.start)}@${c.name} ${value.slice(caret)}`;
+    const at = el.selectionStart ?? value.length;
+    const next = `${value.slice(0, q.start)}@${c.name} ${value.slice(at)}`;
+    caret.current = q.start + c.name.length + 2;
     onChange(next);
     setQ(null);
-    const pos = q.start + c.name.length + 2;
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(pos, pos);
-    });
   };
 
   const common = {

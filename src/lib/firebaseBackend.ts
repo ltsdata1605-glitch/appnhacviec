@@ -3,7 +3,6 @@ import {
   GoogleAuthProvider,
   browserLocalPersistence,
   getRedirectResult,
-  indexedDBLocalPersistence,
   initializeAuth,
   onAuthStateChanged,
   signInWithPopup,
@@ -19,14 +18,15 @@ import {
   collection,
   deleteDoc,
   deleteField,
+  disableNetwork,
   doc,
+  enableNetwork,
   getDoc,
   getDocs,
   increment,
   initializeFirestore,
+  memoryLocalCache,
   onSnapshot,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   query as fsQuery,
   setDoc,
   updateDoc,
@@ -67,19 +67,94 @@ const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.p
 const isStandalone = () =>
   (window.navigator as unknown as { standalone?: boolean }).standalone === true || window.matchMedia('(display-mode: standalone)').matches;
 
+/* iOS 26 (app thêm vào Màn hình chính): sau khi bật thông báo đẩy, WebKit có thể treo các giao dịch ghi IndexedDB
+   hàng chục phút (WebKit bug 315804). Firebase Auth ghi phiên đăng nhập vào IndexedDB mỗi lần làm mới token (~1 giờ),
+   Firestore ghi hàng đợi vào IndexedDB nếu bật bộ nhớ đệm bền → mọi thao tác lưu bị treo.
+   Vì vậy app không dùng IndexedDB: phiên đăng nhập lưu ở localStorage, Firestore dùng bộ nhớ đệm trong RAM. */
+
+const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | 'timeout'> =>
+  Promise.race([p, new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), ms))]);
+
+/** Chuyển phiên đăng nhập cũ (đã lưu trong IndexedDB ở bản trước) sang localStorage — chỉ đọc, có giới hạn thời gian. */
+async function migrateAuthFromIndexedDB(apiKey: string) {
+  const key = `firebase:authUser:${apiKey}:[DEFAULT]`;
+  try {
+    if (localStorage.getItem(key) || localStorage.getItem('nv-auth-idb-checked') || !('indexedDB' in window)) return;
+  } catch {
+    return;
+  }
+  const read = new Promise<unknown>((resolve) => {
+    try {
+      const req = indexedDB.open('firebaseLocalStorageDb');
+      req.onupgradeneeded = () => req.transaction?.abort(); // chưa có CSDL → không tạo mới
+      req.onerror = () => resolve(null);
+      req.onsuccess = () => {
+        const db = req.result;
+        try {
+          if (!db.objectStoreNames.contains('firebaseLocalStorage')) return resolve(null);
+          const get = db.transaction('firebaseLocalStorage', 'readonly').objectStore('firebaseLocalStorage').get(key);
+          get.onsuccess = () => resolve((get.result as { value?: unknown } | undefined)?.value ?? null);
+          get.onerror = () => resolve(null);
+        } catch {
+          resolve(null);
+        } finally {
+          setTimeout(() => db.close(), 0);
+        }
+      };
+    } catch {
+      resolve(null);
+    }
+  });
+  const value = await withTimeout(read, 1500);
+  try {
+    if (value && value !== 'timeout') localStorage.setItem(key, JSON.stringify(value));
+    if (value !== 'timeout') localStorage.setItem('nv-auth-idb-checked', '1');
+  } catch {
+    /* bỏ qua */
+  }
+}
+
 export async function createFirebaseBackend(): Promise<Backend> {
   const app = initializeApp(firebaseConfig as Record<string, string>);
+  await migrateAuthFromIndexedDB(String(firebaseConfig.apiKey || ''));
   const auth = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    persistence: [browserLocalPersistence],
     popupRedirectResolver: browserPopupRedirectResolver,
   });
   auth.languageCode = 'vi';
   const useEmulators = import.meta.env.VITE_USE_EMULATORS === '1';
   if (useEmulators) connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    localCache: memoryLocalCache(),
     ignoreUndefinedProperties: true,
   });
+
+  // Kết nối lại khi mở app từ nền (iPhone đóng băng kết nối khi app ở nền)
+  let kicking: Promise<void> | null = null;
+  const kick = () =>
+    (kicking ||= disableNetwork(db)
+      .then(() => enableNetwork(db))
+      .catch(() => enableNetwork(db).catch(() => {}))
+      .finally(() => {
+        kicking = null;
+      }));
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+    else if (hiddenAt && Date.now() - hiddenAt > 60_000) {
+      hiddenAt = 0;
+      void kick();
+    }
+  });
+
+  /** Chờ máy chủ xác nhận ghi; quá lâu thì kết nối lại một lần, vẫn không được thì báo lỗi để nút Lưu không quay mãi. */
+  const confirmed = async (p: Promise<void>) => {
+    p.catch(() => {}); // tránh lỗi "unhandled" khi đã báo hết giờ
+    if ((await withTimeout(p, 9000)) !== 'timeout') return;
+    void kick();
+    if ((await withTimeout(p, 11000)) !== 'timeout') return;
+    throw Object.assign(new Error('Máy chủ chưa xác nhận'), { code: 'timeout' });
+  };
   const storage = getStorage(app);
   if (useEmulators) {
     // Chỉ dùng cho kiểm thử tự động trên Firebase Emulator — không có trong bản chạy thật.
@@ -160,7 +235,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
       return snap.docs.map((d) => mapDoc(d.id, d.data()));
     },
     async set(col, id, data, merge) {
-      await setDoc(doc(db, col, id), translateObj(clean({ ...data, id })), { merge: !!merge });
+      await confirmed(setDoc(doc(db, col, id), translateObj(clean({ ...data, id })), { merge: !!merge }));
     },
     async update(col, id, patch) {
       const p: Record<string, unknown> = {};
@@ -168,10 +243,10 @@ export async function createFirebaseBackend(): Promise<Backend> {
         if (v === undefined) continue;
         p[k] = isFieldOp(v) ? translate(v) : v && typeof v === 'object' ? clean(v as Record<string, unknown>) : v;
       }
-      await updateDoc(doc(db, col, id), p as DocumentData);
+      await confirmed(updateDoc(doc(db, col, id), p as DocumentData));
     },
     async remove(col, id) {
-      await deleteDoc(doc(db, col, id));
+      await confirmed(deleteDoc(doc(db, col, id)));
     },
     async batch(ops) {
       const b = writeBatch(db);
@@ -184,7 +259,7 @@ export async function createFirebaseBackend(): Promise<Backend> {
           b.update(r, p as DocumentData);
         } else b.delete(r);
       }
-      await b.commit();
+      await confirmed(b.commit());
     },
     newId() {
       return randomId(20);
@@ -212,7 +287,8 @@ export async function createFirebaseBackend(): Promise<Backend> {
         if (perm !== 'granted') return 'denied';
         if (!vapidKey) return 'error';
         const reg = await navigator.serviceWorker.ready;
-        const token = await getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: reg });
+        const token = await withTimeout(getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: reg }), 20000);
+        if (token === 'timeout') return 'error';
         if (!token) return 'error';
         await setDoc(
           doc(db, 'pushTokens', uid),

@@ -9,7 +9,7 @@ import { Icon } from '../../ui/Icon';
 import { MentionInput, MentionText } from '../../ui/Mention';
 import { api } from '../../lib/backend';
 import { compressImageFile } from '../../lib/image';
-import { closeRollcall, deleteRollcall, inAudience, nudgeRollcall, rollcallDone, saveRollcall, toggleRollcallItem } from '../../lib/actions';
+import { closeRollcall, deleteRollcall, inAudience, nudgeRollcall, rollcallDone, saveErrorText, saveRollcall, toggleRollcallItem } from '../../lib/actions';
 import { REMIND_OPTIONS } from '../../lib/constants';
 import { addDays, dueLabel, fromInputs, friendly, now, vnDate, vnTime } from '../../lib/time';
 import { PersonPicker, useActor } from '../shared';
@@ -362,6 +362,7 @@ export function RollcallEditor({ close, rc }: { close: () => void; rc?: Rollcall
   const [dueTime, setDueTime] = useState(rc?.dueAt ? vnTime(rc.dueAt) : '18:00');
   const [remind, setRemind] = useState<number | null>(rc?.remindBefore ?? 60);
   const [busy, setBusy] = useState(false);
+  const [newId] = useState(() => api().newId());
   const [uploading, setUploading] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const valid = title.trim().length >= 3 && items.some((i) => i.trim());
@@ -448,11 +449,12 @@ export function RollcallEditor({ close, rc }: { close: () => void; rc?: Rollcall
         },
         actor,
         d.active,
+        newId,
       );
       ui.toast({ text: rc ? 'Đã lưu' : 'Đã tạo điểm danh', icon: 'check', color: 'green' });
       close();
-    } catch {
-      ui.alert({ title: 'Chưa lưu được', message: 'Kiểm tra kết nối mạng rồi thử lại.' });
+    } catch (e) {
+      ui.alert({ title: 'Chưa lưu được', message: saveErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -526,7 +528,7 @@ export function RollcallEditor({ close, rc }: { close: () => void; rc?: Rollcall
           </div>
         </Section>
 
-        <Section title="Người điểm danh và hạn chót" small>
+        <Section title="Người điểm danh và hạn chót" small footer={audienceCount === 0 ? 'Nhóm này chưa có ai trong kho. Vẫn tạo được, người được duyệt vào kho sau sẽ thấy ngay.' : undefined}>
           <div className="group">
             <Cell icon="people" iconColor="indigo" title="Ai cần điểm danh" detail={`${audienceLabel(audience, d.nameOf)} (${audienceCount})`} chevron onClick={pickAudience} />
             <Cell icon="calendar" iconColor="red" title="Có hạn chót" trailing={<Switch checked={hasDue} onChange={setHasDue} label="Có hạn chót" />} />
