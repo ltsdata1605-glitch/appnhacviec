@@ -1,0 +1,203 @@
+rules_version = '2';
+
+// Quy tắc phân quyền dữ liệu — kiểm tra trên máy chủ, không phụ thuộc giao diện.
+// - Quản lý kho A không đọc/ghi được dữ liệu kho B.
+// - Việc cá nhân: chỉ người được giao, người giao và quản lý kho xem được.
+// - Việc bộ phận/hãng/toàn siêu thị: mọi nhân viên của kho xem được.
+// - Ảnh báo cáo 8NTTT: người chụp và người có quyền chấm của kho xem được.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function email() { return request.auth.token.email.lower(); }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/admins/$(email()));
+    }
+    function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return hasProfile() && me().status == 'active'; }
+    function inStore(s) { return isAdmin() || (active() && me().storeCode == s); }
+    function isManagerOf(s) { return isAdmin() || (active() && me().storeCode == s && me().role == 'manager'); }
+    function can(s, p) {
+      return isManagerOf(s) || (active() && me().storeCode == s && me().get('permissions', {}).get(p, false) == true);
+    }
+    function nowMs() { return request.time.toMillis(); }
+    function recent(t) { return t is int && t > nowMs() - 15 * 60000 && t < nowMs() + 5 * 60000; }
+    function changedOnly(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    // Ngày 'YYYY-MM-DD' có phải hôm nay theo giờ Việt Nam
+    function isVnToday(d) {
+      let t = request.time + duration.value(7, 'h');
+      let p = d.split('-');
+      return p.size() == 3 && int(p[0]) == t.year() && int(p[1]) == t.month() && int(p[2]) == t.day();
+    }
+
+    // ---------- Admin ----------
+    match /admins/{adminEmail} {
+      allow get: if signedIn() && (adminEmail == email() || isAdmin());
+      allow list, create, update, delete: if isAdmin();
+    }
+
+    // ---------- Siêu thị (mã kho) ----------
+    match /stores/{code} {
+      allow get: if signedIn();
+      allow list: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isManagerOf(code) && changedOnly([
+        'name', 'address', 'location', 'radius', 'deadline', 'reminderTimes', 'digestTime',
+        'quietStart', 'quietEnd', 'minPhotos', 'retentionDays', 'escalateMinutes', 'departments', 'brands', 'chain'
+      ]));
+    }
+
+    // ---------- Hồ sơ nhân sự ----------
+    match /users/{uid} {
+      function validNew() {
+        let d = request.resource.data;
+        return d.uid == uid && d.email == email() && d.status == 'pending'
+          && d.role in ['manager', 'staff', 'pg']
+          && d.fullName is string && d.fullName.size() > 1 && d.fullName.size() < 80
+          && d.storeCode is string && d.storeCode.size() > 0 && d.storeCode.size() < 20
+          && !('permissions' in d) && !('approvedAt' in d) && !('approvedBy' in d);
+      }
+      function selfUpdate() {
+        return request.auth.uid == uid && resource.data.status == 'active'
+          && changedOnly(['photoURL', 'transferTo', 'transferAt', 'updatedAt'])
+          && (request.resource.data.get('transferTo', null) == null
+              || exists(/databases/$(database)/documents/stores/$(request.resource.data.transferTo)));
+      }
+      function selfReRegister() {
+        return request.auth.uid == uid && resource.data.status in ['pending', 'rejected'] && validNew();
+      }
+      function managerUpdate() {
+        let s = resource.data.storeCode;
+        let d = request.resource.data;
+        let base = resource.data.role != 'manager' && d.role in ['staff', 'pg'] && d.storeCode == s
+          && d.uid == resource.data.uid && d.email == resource.data.email && request.auth.uid != uid;
+        return base && (isManagerOf(s) || (can(s, 'approve')
+          && changedOnly(['status', 'approvedAt', 'approvedBy', 'updatedAt', 'department', 'rejectReason'])
+          && d.status in ['active', 'rejected']));
+      }
+      function transferDecision() {
+        let to = resource.data.get('transferTo', '');
+        return to != null && to != '' && resource.data.role != 'manager' && can(to, 'approve')
+          && request.resource.data.storeCode in [to, resource.data.storeCode]
+          && request.resource.data.role == resource.data.role
+          && changedOnly(['storeCode', 'transferTo', 'transferAt', 'department', 'permissions', 'updatedAt']);
+      }
+
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin() || inStore(resource.data.storeCode)
+        || can(resource.data.get('transferTo', ''), 'approve'));
+      allow list: if isAdmin() || inStore(resource.data.storeCode) || can(resource.data.get('transferTo', ''), 'approve');
+      allow create: if signedIn() && request.auth.uid == uid && (isAdmin() || validNew());
+      allow update: if isAdmin() || selfUpdate() || selfReRegister() || managerUpdate() || transferDecision();
+      allow delete: if isAdmin() || (request.auth.uid == uid && resource.data.status in ['pending', 'rejected']);
+    }
+
+    // ---------- Khu vực 8NTTT ----------
+    match /areas/{id} {
+      allow read: if inStore(resource.data.storeCode);
+      allow create: if isManagerOf(request.resource.data.storeCode);
+      allow update: if isManagerOf(resource.data.storeCode) && request.resource.data.storeCode == resource.data.storeCode;
+      allow delete: if isManagerOf(resource.data.storeCode);
+    }
+
+    // ---------- Nghỉ phép ----------
+    match /leaves/{id} {
+      allow read: if inStore(resource.data.storeCode);
+      allow create: if isManagerOf(request.resource.data.storeCode)
+        || (inStore(request.resource.data.storeCode) && request.resource.data.uid == request.auth.uid
+            && request.resource.data.status == 'pending');
+      allow update: if can(resource.data.storeCode, 'approve');
+      allow delete: if isManagerOf(resource.data.storeCode)
+        || (resource.data.uid == request.auth.uid && resource.data.status == 'pending');
+    }
+
+    // ---------- Công việc ----------
+    match /tasks/{id} {
+      function isActorOf(d) {
+        return inStore(d.storeCode) && (
+          (d.scope == 'personal' && d.assigneeUid == request.auth.uid)
+          || (d.scope == 'department' && me().get('department', '') == d.department)
+          || (d.scope == 'brand' && me().get('brand', '') == d.brand)
+          || d.scope == 'store');
+      }
+      allow read: if isManagerOf(resource.data.storeCode)
+        || (inStore(resource.data.storeCode) && (resource.data.shared == true
+            || resource.data.assigneeUid == request.auth.uid || resource.data.createdBy == request.auth.uid));
+      allow create: if can(request.resource.data.storeCode, 'assign')
+        && request.resource.data.shared == (request.resource.data.scope != 'personal');
+      allow update: if
+        (can(resource.data.storeCode, 'assign')
+          && (isManagerOf(resource.data.storeCode) || resource.data.createdBy == request.auth.uid)
+          && request.resource.data.storeCode == resource.data.storeCode)
+        || (isActorOf(resource.data) && changedOnly([
+            'status', 'checklist', 'completions', 'seenBy', 'activity', 'photos',
+            'completedBy', 'completedByName', 'completedAt', 'updatedAt']))
+        || (inStore(resource.data.storeCode)
+            && (resource.data.shared == true || resource.data.assigneeUid == request.auth.uid)
+            && changedOnly(['seenBy', 'activity', 'updatedAt']));
+      allow delete: if isManagerOf(resource.data.storeCode) || resource.data.createdBy == request.auth.uid;
+    }
+
+    match /taskTemplates/{id} {
+      allow read: if inStore(resource.data.storeCode);
+      allow create: if can(request.resource.data.storeCode, 'assign');
+      allow update, delete: if can(resource.data.storeCode, 'assign');
+    }
+
+    // ---------- Báo cáo 8NTTT ----------
+    match /reports/{id} {
+      function validSubmit() {
+        let d = request.resource.data;
+        return inStore(d.storeCode) && d.uid == request.auth.uid
+          && id == d.storeCode + '_' + d.date + '_' + d.areaId
+          && isVnToday(d.date) && recent(d.submittedAt)
+          && d.photos is list && d.photos.size() >= 1 && d.photos.size() <= 6
+          && d.get('review', null) == null
+          && get(/databases/$(database)/documents/areas/$(d.areaId)).data.storeCode == d.storeCode;
+      }
+      allow read: if can(resource.data.storeCode, 'review')
+        || (inStore(resource.data.storeCode) && resource.data.uid == request.auth.uid);
+      allow create: if validSubmit();
+      allow update: if (validSubmit() && resource.data.uid == request.auth.uid
+          && (resource.data.get('review', null) == null || resource.data.review.result == 'fail'))
+        || (can(resource.data.storeCode, 'review') && resource.data.uid != request.auth.uid && changedOnly(['review']));
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Thư viện ----------
+    match /posts/{id} {
+      allow read: if inStore(resource.data.storeCode);
+      allow create: if can(request.resource.data.storeCode, 'library');
+      allow update: if can(resource.data.storeCode, 'library')
+        || (inStore(resource.data.storeCode) && changedOnly(['acks'])
+            && request.resource.data.acks.diff(resource.data.get('acks', {})).affectedKeys().hasOnly([request.auth.uid]));
+      allow delete: if can(resource.data.storeCode, 'library');
+    }
+
+    // ---------- Thông báo ----------
+    match /notifications/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid && changedOnly(['read']);
+      allow create: if (active() || isAdmin()) && inStore(request.resource.data.storeCode)
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.title is string && request.resource.data.title.size() < 200
+        && request.resource.data.body is string && request.resource.data.body.size() < 1000
+        && request.resource.data.read == false;
+    }
+
+    match /pushTokens/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ---------- Nhật ký ----------
+    match /audit/{id} {
+      allow read: if isManagerOf(resource.data.storeCode);
+      allow create: if (active() || isAdmin()) && request.resource.data.actorUid == request.auth.uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

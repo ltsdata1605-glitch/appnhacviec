@@ -1,0 +1,97 @@
+const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
+const fs = require('fs');
+const { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteField } = require('firebase/firestore');
+
+const VN = 7 * 3600000;
+const vnDate = (ms) => { const d = new Date(ms + VN); return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`; };
+let pass = 0, fail = 0;
+async function t(name, p) { try { await p; pass++; console.log('  ✓', name); } catch (e) { fail++; console.log('  ✗', name, '—', e.message.split('\n')[0]); } }
+
+(async () => {
+  const env = await initializeTestEnvironment({ projectId: 'demo-nhacviec', firestore: { rules: fs.readFileSync(__dirname + '/../firestore.rules', 'utf8'), host: '127.0.0.1', port: 8080 } });
+  const now = Date.now();
+  const today = vnDate(now);
+  const yesterday = vnDate(now - 86400000);
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'admins/boss@gmail.com'), { email: 'boss@gmail.com' });
+    await setDoc(doc(db, 'stores/1234'), { code: '1234', name: 'A', chain: 'DMX', deadline: '21:00' });
+    await setDoc(doc(db, 'stores/5678'), { code: '5678', name: 'B', chain: 'TGDD', deadline: '21:00' });
+    const u = (uid, o) => setDoc(doc(db, `users/${uid}`), { uid, email: `${uid}@gmail.com`, fullName: uid, status: 'active', storeCode: '1234', createdAt: now, ...o });
+    await u('mgr', { role: 'manager', department: 'Quản lý' });
+    await u('kho', { role: 'staff', department: 'Kho' });
+    await u('thungan', { role: 'staff', department: 'Thu ngân' });
+    await u('lead', { role: 'staff', department: 'Kho', permissions: { assign: true, review: true, approve: true } });
+    await u('other', { role: 'staff', department: 'Kho', storeCode: '5678' });
+    await u('mgr2', { role: 'manager', storeCode: '5678' });
+    await u('pend', { role: 'staff', status: 'pending' });
+    await setDoc(doc(db, 'areas/a1'), { storeCode: '1234', name: 'Kho', ownerUid: 'kho', active: true });
+    await setDoc(doc(db, 'tasks/p1'), { storeCode: '1234', shared: false, scope: 'personal', assigneeUid: 'kho', title: 'Riêng Kho', status: 'open', createdBy: 'mgr', createdAt: now, activity: [] });
+    await setDoc(doc(db, 'tasks/d1'), { storeCode: '1234', shared: true, scope: 'department', department: 'Kho', title: 'Bộ phận Kho', status: 'open', createdBy: 'mgr', createdAt: now, activity: [] });
+    await setDoc(doc(db, `reports/1234_${today}_a1`), { storeCode: '1234', date: today, areaId: 'a1', uid: 'kho', photos: [{ url: 'x' }], submittedAt: now, review: null });
+    await setDoc(doc(db, 'posts/n1'), { storeCode: '1234', title: 'Quy định', acks: {}, requireAck: true, version: 1 });
+  });
+  const as = (uid, email) => env.authenticatedContext(uid, { email: email || `${uid}@gmail.com`, email_verified: true }).firestore();
+  const kho = as('kho'), thungan = as('thungan'), mgr = as('mgr'), lead = as('lead'), other = as('other'), mgr2 = as('mgr2');
+  const admin = as('bossuid', 'boss@gmail.com');
+  const fresh = as('newbie');
+
+  console.log('Nhân sự');
+  await t('NV đọc danh sách kho mình', assertSucceeds(getDocs(query(collection(kho, 'users'), where('storeCode', '==', '1234')))));
+  await t('NV không đọc danh sách kho khác', assertFails(getDocs(query(collection(kho, 'users'), where('storeCode', '==', '5678')))));
+  await t('QL kho B không đọc NV kho A', assertFails(getDoc(doc(mgr2, 'users/kho'))));
+  await t('Người mới tạo hồ sơ chờ duyệt', assertSucceeds(setDoc(doc(fresh, 'users/newbie'), { uid: 'newbie', email: 'newbie@gmail.com', fullName: 'Người Mới', role: 'staff', status: 'pending', storeCode: '1234', createdAt: now })));
+  await t('Người mới không tự kích hoạt', assertFails(setDoc(doc(as('x2'), 'users/x2'), { uid: 'x2', email: 'x2@gmail.com', fullName: 'X Hai', role: 'staff', status: 'active', storeCode: '1234', createdAt: now })));
+  await t('Người mới không tự cấp quyền', assertFails(setDoc(doc(as('x3'), 'users/x3'), { uid: 'x3', email: 'x3@gmail.com', fullName: 'X Ba', role: 'staff', status: 'pending', storeCode: '1234', permissions: { assign: true }, createdAt: now })));
+  await t('QL duyệt NV kho mình', assertSucceeds(updateDoc(doc(mgr, 'users/pend'), { status: 'active', department: 'Kho', approvedAt: now, approvedBy: 'mgr' })));
+  await t('QL không nâng NV lên Quản lý', assertFails(updateDoc(doc(mgr, 'users/kho'), { role: 'manager' })));
+  await t('QL kho B không duyệt NV kho A', assertFails(updateDoc(doc(mgr2, 'users/newbie'), { status: 'active' })));
+  await t('Trưởng ca có quyền duyệt chỉ đổi trạng thái', assertSucceeds(updateDoc(doc(lead, 'users/newbie'), { status: 'active', approvedAt: now, approvedBy: 'lead', updatedAt: now })));
+  await t('Trưởng ca không cấp quyền cho người khác', assertFails(updateDoc(doc(lead, 'users/thungan'), { permissions: { assign: true } })));
+  await t('NV tự sửa chức vụ: bị chặn', assertFails(updateDoc(doc(kho, 'users/kho'), { role: 'manager' })));
+  await t('NV xin chuyển kho', assertSucceeds(updateDoc(doc(other, 'users/other'), { transferTo: '1234', transferAt: now, updatedAt: now })));
+  await t('QL kho đích thấy yêu cầu chuyển', assertSucceeds(getDocs(query(collection(mgr, 'users'), where('transferTo', '==', '1234')))));
+  await t('QL kho đích duyệt chuyển kho', assertSucceeds(updateDoc(doc(mgr, 'users/other'), { storeCode: '1234', transferTo: null, transferAt: null, department: null, permissions: {}, updatedAt: now })));
+  await t('Admin duyệt quản lý', assertSucceeds(updateDoc(doc(admin, 'users/mgr2'), { status: 'active' })));
+  await t('Admin xem mọi kho', assertSucceeds(getDocs(collection(admin, 'stores'))));
+  await t('QL không liệt kê mọi kho', assertFails(getDocs(collection(mgr, 'stores'))));
+
+  console.log('Công việc');
+  await t('Chủ việc cá nhân đọc được', assertSucceeds(getDoc(doc(kho, 'tasks/p1'))));
+  await t('Người khác không đọc việc cá nhân', assertFails(getDoc(doc(thungan, 'tasks/p1'))));
+  await t('QL đọc việc cá nhân', assertSucceeds(getDoc(doc(mgr, 'tasks/p1'))));
+  await t('Mọi NV đọc việc bộ phận', assertSucceeds(getDoc(doc(thungan, 'tasks/d1'))));
+  await t('Truy vấn việc chung', assertSucceeds(getDocs(query(collection(thungan, 'tasks'), where('storeCode', '==', '1234'), where('shared', '==', true), where('createdAt', '>=', 0)))));
+  await t('Truy vấn việc của mình', assertSucceeds(getDocs(query(collection(thungan, 'tasks'), where('storeCode', '==', '1234'), where('assigneeUid', '==', 'thungan'), where('createdAt', '>=', 0)))));
+  await t('NV kho khác không đọc việc bộ phận', assertFails(getDoc(doc(mgr2, 'tasks/d1'))));
+  await t('NV không có quyền không giao việc', assertFails(setDoc(doc(kho, 'tasks/x'), { storeCode: '1234', shared: true, scope: 'store', title: 'x', status: 'open', createdBy: 'kho', createdAt: now })));
+  await t('Trưởng ca có quyền giao việc', assertSucceeds(setDoc(doc(lead, 'tasks/y'), { storeCode: '1234', shared: false, scope: 'personal', assigneeUid: 'kho', title: 'y', status: 'open', createdBy: 'lead', createdAt: now })));
+  await t('NV hoàn tất việc của mình', assertSucceeds(updateDoc(doc(kho, 'tasks/p1'), { status: 'done', completedBy: 'kho', completedByName: 'kho', completedAt: now, updatedAt: now })));
+  await t('NV không sửa tiêu đề', assertFails(updateDoc(doc(kho, 'tasks/p1'), { title: 'đổi' })));
+  await t('NV Thu ngân không hoàn tất việc bộ phận Kho', assertFails(updateDoc(doc(thungan, 'tasks/d1'), { status: 'done' })));
+  await t('NV Thu ngân đánh dấu đã xem việc chung', assertSucceeds(updateDoc(doc(thungan, 'tasks/d1'), { 'seenBy.thungan': now })));
+
+  console.log('Báo cáo 8NTTT');
+  await env.withSecurityRulesDisabled(async (ctx) => setDoc(doc(ctx.firestore(), 'areas/a2'), { storeCode: '1234', name: 'Thu ngân', active: true }));
+  await t('NV gửi báo cáo hợp lệ', assertSucceeds(setDoc(doc(thungan, `reports/1234_${today}_a2`), { storeCode: '1234', date: today, areaId: 'a2', uid: 'thungan', photos: [{ url: 'x' }], submittedAt: now, review: null })));
+  await t('Không gửi báo cáo cho ngày hôm qua', assertFails(setDoc(doc(thungan, `reports/1234_${yesterday}_a2`), { storeCode: '1234', date: yesterday, areaId: 'a2', uid: 'thungan', photos: [{ url: 'x' }], submittedAt: now, review: null })));
+  await t('Không gửi báo cáo với giờ cũ', assertFails(setDoc(doc(kho, `reports/1234_${today}_a1`), { storeCode: '1234', date: today, areaId: 'a1', uid: 'kho', photos: [{ url: 'x' }], submittedAt: now - 3600000, review: null })));
+  await t('NV không xem báo cáo người khác', assertFails(getDoc(doc(thungan, `reports/1234_${today}_a1`))));
+  await t('QL xem báo cáo', assertSucceeds(getDoc(doc(mgr, `reports/1234_${today}_a1`))));
+  await t('QL chấm báo cáo', assertSucceeds(updateDoc(doc(mgr, `reports/1234_${today}_a1`), { review: { result: 'fail', failed: [0], note: 'lau lại', by: 'mgr', byName: 'mgr', at: now } })));
+  await t('NV gửi lại sau khi Không đạt', assertSucceeds(setDoc(doc(kho, `reports/1234_${today}_a1`), { storeCode: '1234', date: today, areaId: 'a1', uid: 'kho', photos: [{ url: 'y' }], submittedAt: now, review: null, attempt: 2 })));
+  await t('NV không tự chấm Đạt', assertFails(updateDoc(doc(kho, `reports/1234_${today}_a1`), { review: { result: 'pass' } })));
+  await t('QL kho B không xem ảnh kho A', assertFails(getDoc(doc(mgr2, `reports/1234_${today}_a1`))));
+
+  console.log('Thư viện & thông báo');
+  await t('NV xác nhận đã đọc', assertSucceeds(updateDoc(doc(kho, 'posts/n1'), { 'acks.kho': { at: now, v: 1, name: 'kho' } })));
+  await t('NV không xác nhận hộ người khác', assertFails(updateDoc(doc(kho, 'posts/n1'), { 'acks.thungan': { at: now, v: 1, name: 'x' } })));
+  await t('NV không sửa bài', assertFails(updateDoc(doc(kho, 'posts/n1'), { title: 'x' })));
+  await t('NV gửi thông báo trong kho', assertSucceeds(setDoc(doc(kho, 'notifications/z1'), { uid: 'thungan', storeCode: '1234', fromUid: 'kho', fromName: 'kho', title: 'a', body: 'b', read: false, createdAt: now })));
+  await t('Không gửi thông báo sang kho khác', assertFails(setDoc(doc(kho, 'notifications/z2'), { uid: 'mgr2', storeCode: '5678', fromUid: 'kho', fromName: 'kho', title: 'a', body: 'b', read: false, createdAt: now })));
+  await t('Không đọc thông báo của người khác', assertFails(getDoc(doc(kho, 'notifications/z1'))));
+
+  console.log(`\n${pass} đạt, ${fail} lỗi`);
+  await env.cleanup();
+  process.exit(fail ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(2); });

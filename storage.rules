@@ -1,0 +1,45 @@
+rules_version = '2';
+
+// Quy tắc lưu trữ ảnh và tệp. Ảnh báo cáo chỉ người chụp và người có quyền chấm của kho xem được.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function user() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data; }
+    function isAdmin() {
+      return signedIn() && firestore.exists(/databases/(default)/documents/admins/$(request.auth.token.email.lower()));
+    }
+    function inStore(s) { return isAdmin() || (signedIn() && user().status == 'active' && user().storeCode == s); }
+    function isManagerOf(s) { return isAdmin() || (inStore(s) && user().role == 'manager'); }
+    function can(s, p) { return isManagerOf(s) || (inStore(s) && user().get('permissions', {}).get(p, false) == true); }
+    function jpeg(maxMb) {
+      return request.resource.size < maxMb * 1024 * 1024 && request.resource.contentType == 'image/jpeg';
+    }
+
+    // Ảnh báo cáo 8NTTT: reports/{kho}/{ngày}/{khu vực}/{uid}/{tệp}
+    match /reports/{store}/{date}/{area}/{uid}/{file} {
+      allow read: if request.auth.uid == uid || can(store, 'review');
+      allow create: if request.auth.uid == uid && inStore(store) && jpeg(4);
+      allow delete: if isAdmin();
+    }
+
+    // Ảnh xác nhận hoàn tất công việc
+    match /tasks/{store}/{task}/{uid}/{file} {
+      allow read: if inStore(store);
+      allow create: if request.auth.uid == uid && inStore(store) && jpeg(4);
+    }
+
+    // Tệp đính kèm thư viện
+    match /library/{store}/{file} {
+      allow read: if inStore(store);
+      allow create: if can(store, 'library') && request.resource.size < 15 * 1024 * 1024;
+      allow delete: if can(store, 'library');
+    }
+
+    // Ảnh chuẩn khu vực
+    match /areas/{store}/{file} {
+      allow read: if inStore(store);
+      allow create: if isManagerOf(store) && jpeg(4);
+      allow delete: if isManagerOf(store);
+    }
+  }
+}
