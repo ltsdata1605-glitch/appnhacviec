@@ -309,6 +309,38 @@ export function seedDemo(): Record<string, Record<string, Doc>> {
     }),
   );
 
+  // Bàn giao ca
+  put('tasks', {
+    ...mk('h1', {
+      scope: 'department', shared: true, department: 'Kho', kind: 'handover',
+      handover: { id: 'hv1', shift: `Ca sáng ${today.slice(8)}/${today.slice(5, 7)}`, fromUid: 'u-khoa', fromName: 'Trịnh Đăng Khoa', at: t - 3 * 3600000 },
+      title: 'Khách hẹn lấy hàng: chị Lan lấy tủ lạnh Aqua 9h mai', note: 'Khách hẹn lấy hàng: chị Lan lấy tủ lạnh Aqua 9h mai, đã thu cọc 2.000.000', priority: 'high',
+      dueAt: t + 3600000 * 2, createdBy: 'u-khoa', createdByName: 'Trịnh Đăng Khoa',
+      activity: [{ type: 'created', uid: 'u-khoa', name: 'Trịnh Đăng Khoa', at: t - 3 * 3600000, note: 'Bàn giao ca sáng' }],
+    }),
+  } as unknown as Doc);
+
+  // Điểm danh
+  put('rollcalls', {
+    id: 'rc1', storeCode: STORE, title: 'Triển khai trưng bày Black Friday',
+    body: 'Mỗi bạn xem video hướng dẫn, đọc tài liệu và xác nhận đã thực hiện đủ 3 việc tại khu vực mình phụ trách.\nTài liệu: https://example.com/black-friday',
+    media: [{ type: 'link', url: 'https://example.com/black-friday', name: 'Tài liệu triển khai Black Friday' }],
+    items: [{ id: 'i1', text: 'Thay toàn bộ bảng giá CTKM mới' }, { id: 'i2', text: 'Dán decal Black Friday ô kính' }, { id: 'i3', text: 'Mở video CTKM trên tivi trưng bày' }],
+    audience: { type: 'all' }, dueAt: vnAt(today, '20:00'), remindBefore: 60,
+    progress: { 'u-lan': { items: { i1: t - 7000000, i2: t - 6900000, i3: t - 6800000 }, doneAt: t - 6800000, name: 'Nguyễn Thị Lan' }, 'u-nam': { items: { i1: t - 3600000 }, doneAt: null, name: 'Lê Hoàng Nam' } },
+    createdBy: 'u-quan', createdByName: 'Trần Minh Quân', createdAt: t - 8 * 3600000, updatedAt: t - 8 * 3600000, reminded: {},
+  });
+
+  // Kiểm quỹ
+  put('cashCounts', {
+    id: 'cc1', storeCode: STORE, name: `Ca sáng ${today.slice(8)}/${today.slice(5, 7)} · Lan`,
+    counts: { '500000': 18, '200000': 12, '100000': 9, '50000': 6, '20000': 15, '10000': 8, '5000': 4 }, other: 1500,
+    total: 18 * 500000 + 12 * 200000 + 9 * 100000 + 6 * 50000 + 15 * 20000 + 8 * 10000 + 4 * 5000 + 1500, sheets: 72,
+    expected: 13041500, diff: 18 * 500000 + 12 * 200000 + 9 * 100000 + 6 * 50000 + 15 * 20000 + 8 * 10000 + 4 * 5000 + 1500 - 13041500,
+    note: '@Lê Hoàng Nam mượn 200.000 mua văn phòng phẩm', mentions: ['u-nam'], createdBy: 'u-lan', createdByName: 'Nguyễn Thị Lan',
+    createdAt: vnAt(today, '13:58'), date: today,
+  });
+
   void vnAt;
   return db;
 }

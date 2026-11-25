@@ -68,8 +68,9 @@ export const POST_CATEGORIES: { key: PostCategory; label: string; icon: string; 
   { key: 'forms', label: 'Biểu mẫu', icon: 'paperclip', color: 'gray' },
 ];
 
-export const PERMISSION_LABEL: { key: 'assign' | 'library' | 'review' | 'approve'; label: string; desc: string }[] = [
-  { key: 'assign', label: 'Giao việc', desc: 'Tạo và giao việc cho nhân viên' },
+export const PERMISSION_LABEL: { key: 'assign' | 'library' | 'review' | 'approve' | 'cash'; label: string; desc: string }[] = [
+  { key: 'assign', label: 'Giao việc bộ phận, toàn siêu thị', desc: 'Giao việc cho bộ phận, PG, toàn siêu thị, việc lặp lại và tạo điểm danh. Ai cũng giao được việc cá nhân.' },
+  { key: 'cash', label: 'Xem kiểm quỹ toàn kho', desc: 'Xem lịch sử kiểm quỹ của mọi người trong kho' },
   { key: 'review', label: 'Chấm báo cáo ảnh', desc: 'Xem toàn bộ ảnh 8NTTT và chấm Đạt/Không đạt' },
   { key: 'library', label: 'Đăng thư viện', desc: 'Đăng, sửa quy định và nội dung triển khai' },
   { key: 'approve', label: 'Duyệt nhân viên', desc: 'Duyệt nhân viên và PG mới của kho' },

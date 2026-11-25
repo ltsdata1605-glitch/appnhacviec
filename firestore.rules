@@ -124,11 +124,16 @@ service cloud.firestore {
       allow read: if isManagerOf(resource.data.storeCode)
         || (inStore(resource.data.storeCode) && (resource.data.shared == true
             || resource.data.assigneeUid == request.auth.uid || resource.data.createdBy == request.auth.uid));
-      allow create: if can(request.resource.data.storeCode, 'assign')
-        && request.resource.data.shared == (request.resource.data.scope != 'personal');
+      // Ai cũng giao được việc cá nhân và bàn giao ca; việc bộ phận / hãng / toàn siêu thị cần quyền giao việc
+      allow create: if inStore(request.resource.data.storeCode)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.shared == (request.resource.data.scope != 'personal')
+        && (request.resource.data.scope == 'personal'
+            || request.resource.data.get('kind', 'task') == 'handover'
+            || can(request.resource.data.storeCode, 'assign')
+            || (request.resource.data.get('templateId', null) != null && can(request.resource.data.storeCode, 'assign')));
       allow update: if
-        (can(resource.data.storeCode, 'assign')
-          && (isManagerOf(resource.data.storeCode) || resource.data.createdBy == request.auth.uid)
+        ((isManagerOf(resource.data.storeCode) || (inStore(resource.data.storeCode) && resource.data.createdBy == request.auth.uid))
           && request.resource.data.storeCode == resource.data.storeCode)
         || (isActorOf(resource.data) && changedOnly([
             'status', 'checklist', 'completions', 'seenBy', 'activity', 'photos',
@@ -173,6 +178,32 @@ service cloud.firestore {
         || (inStore(resource.data.storeCode) && changedOnly(['acks'])
             && request.resource.data.acks.diff(resource.data.get('acks', {})).affectedKeys().hasOnly([request.auth.uid]));
       allow delete: if can(resource.data.storeCode, 'library');
+    }
+
+    // ---------- Kiểm quỹ ----------
+    match /cashCounts/{id} {
+      allow read: if isManagerOf(resource.data.storeCode) || can(resource.data.storeCode, 'cash')
+        || (inStore(resource.data.storeCode) && (resource.data.createdBy == request.auth.uid
+            || request.auth.uid in resource.data.get('mentions', [])));
+      allow create: if inStore(request.resource.data.storeCode)
+        && request.resource.data.createdBy == request.auth.uid
+        && recent(request.resource.data.createdAt)
+        && request.resource.data.total is number && request.resource.data.total >= 0
+        && request.resource.data.mentions is list && request.resource.data.mentions.size() <= 30;
+      // Phiếu kiểm quỹ đã lưu không sửa được; chỉ quản lý được xoá
+      allow update: if false;
+      allow delete: if isManagerOf(resource.data.storeCode);
+    }
+
+    // ---------- Điểm danh ----------
+    match /rollcalls/{id} {
+      allow read: if inStore(resource.data.storeCode);
+      allow create: if can(request.resource.data.storeCode, 'assign') && request.resource.data.createdBy == request.auth.uid;
+      allow update: if ((isManagerOf(resource.data.storeCode) || (can(resource.data.storeCode, 'assign') && resource.data.createdBy == request.auth.uid))
+          && request.resource.data.storeCode == resource.data.storeCode)
+        || (inStore(resource.data.storeCode) && changedOnly(['progress'])
+            && request.resource.data.progress.diff(resource.data.get('progress', {})).affectedKeys().hasOnly([request.auth.uid]));
+      allow delete: if isManagerOf(resource.data.storeCode) || (can(resource.data.storeCode, 'assign') && resource.data.createdBy == request.auth.uid);
     }
 
     // ---------- Thông báo ----------

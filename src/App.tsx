@@ -15,6 +15,8 @@ import { ReportsScreen } from './screens/reports/ReportsHome';
 import { ReportDetailScreen } from './screens/reports/ReportDetail';
 import { LibraryScreen } from './screens/library/Library';
 import { PostDetailScreen } from './screens/library/PostDetail';
+import { CashDetailScreen } from './screens/cash/CashHistory';
+import { RollcallDetailScreen } from './screens/rollcall/Rollcall';
 import { PeopleScreen } from './screens/people/People';
 import { isOpen, isActor } from './lib/tasks';
 import { todayBoard } from './lib/reports';
@@ -121,6 +123,7 @@ function Main() {
         : board.filter((x) => x.responsible === me.uid && (x.status === 'pending' || x.status === 'overdue')).length;
     }
     b.library = d.posts.filter((p) => p.requireAck && (!p.acks?.[me.uid] || p.acks[me.uid].v < p.version)).length;
+    b.home = d.rollcalls.filter((r) => !r.closed && me && !r.progress?.[me.uid]?.doneAt && (r.audience.type === 'all' || (r.audience.type === 'department' && r.audience.value === me.department) || (r.audience.type === 'brand' && me.role === 'pg' && r.audience.value === me.brand) || (r.audience.type === 'role' && r.audience.value === me.role) || (r.audience.type === 'people' && (r.audience.uids || []).includes(me.uid)))).length || undefined;
     if (manager) b.people = d.pending.length + d.transfersIn.length + d.leaves.filter((l) => l.status === 'pending').length;
     return b;
   }, [d, me, manager, s.store]);
@@ -146,6 +149,8 @@ function Main() {
       if (kind === 'task' && id) go('tasks', <TaskDetailScreen id={id} />);
       else if (kind === 'report' && id) go('reports', <ReportDetailScreen id={id} />);
       else if (kind === 'post' && id) go('library', <PostDetailScreen id={id} />);
+      else if (kind === 'cash' && id) go('home', <CashDetailScreen id={id} />);
+      else if (kind === 'rollcall' && id) go('home', <RollcallDetailScreen id={id} />);
       else if (kind === 'people' && manager) go('people');
       else if (kind === 'tasks') go('tasks');
       else if (kind === 'reports') go('reports');

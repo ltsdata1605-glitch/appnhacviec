@@ -357,7 +357,7 @@ async function main() {
   check('Hoa xác nhận việc toàn siêu thị', await has(C, 'Bạn đã xác nhận'));
   await back(C);
   await cell(C, 'Nhận hàng chuyến 2');
-  await vis(C, 'input[placeholder="Viết bình luận"]').fill('Chuyến 2 trễ 30 phút');
+  await vis(C, 'input[placeholder^="Viết bình luận"]').fill('Chuyến 2 trễ 30 phút');
   await tap(C, '.glass-btn[aria-label="Gửi"]');
   check('Hoa bình luận trong việc', await has(C, 'Chuyến 2 trễ 30 phút'));
   await back(C);
@@ -446,14 +446,22 @@ async function main() {
 
   // =====================================================================
   sec('6. Quyền bổ sung, nghỉ phép, chuyển kho, vô hiệu hoá');
+  await tab(C, 'Công việc');
+  await tap(C, '.glass-btn[aria-label="Giao việc mới"]');
+  check('Nhân viên mặc định giao được việc cá nhân (chưa có quyền giao bộ phận)', (await sheet(C).locator('.cell', { hasText: 'Nhân viên' }).count()) > 0 && (await sheet(C).locator('.segmented button', { hasText: 'Bộ phận' }).count()) === 0);
+  await sheet(C).locator('.glass-btn[aria-label="Đóng"]').click();
+  await C.waitForTimeout(500);
   await tab(A, 'Nhân sự');
   await cell(A, 'Nguyễn Thị Hoa');
-  await A.locator('.cell', { hasText: 'Tạo và giao việc' }).locator('input').click();
+  await A.locator('.cell', { hasText: 'Giao việc bộ phận, toàn siêu thị' }).locator('input').click();
   await A.waitForTimeout(1000);
   await back(A);
   await tab(C, 'Công việc');
   await C.waitForTimeout(1000);
-  check('Cấp quyền giao việc → Hoa có nút giao việc', (await vis(C, '.glass-btn[aria-label="Giao việc mới"]').count()) > 0);
+  await tap(C, '.glass-btn[aria-label="Giao việc mới"]');
+  check('Cấp quyền → Hoa giao được việc cho bộ phận, toàn siêu thị', (await sheet(C).locator('.segmented button', { hasText: 'Bộ phận' }).count()) > 0);
+  await sheet(C).locator('.glass-btn[aria-label="Đóng"]').click();
+  await C.waitForTimeout(500);
   await newTask(C, { title: 'Hỗ trợ trưng bày tủ phone', people: ['Phạm Thu Hà'] });
   await D.waitForTimeout(1500);
   await tab(D, 'Hôm nay');
@@ -561,6 +569,110 @@ async function main() {
   await C.waitForTimeout(700);
   check('Trang Cài đặt thông báo & âm thanh', (await has(C, 'Gửi thử')) && (await has(C, 'Đổi âm báo mặc định')));
   await shot(C, 'notify-settings');
+  await sheet(C).locator('.glass-btn[aria-label="Đóng"]').click().catch(() => {});
+  await C.waitForTimeout(400);
+  await sheet(C).locator('.glass-btn[aria-label="Đóng"]').click().catch(() => {});
+  await C.waitForTimeout(600);
+
+  // =====================================================================
+  sec('9. Kiểm quỹ, gắn tên @, bàn giao ca, điểm danh');
+  const top = (page) => page.locator('.screen:not([aria-hidden="true"])').filter({ visible: true }).last();
+  await tab(C, 'Hôm nay');
+  await C.locator('.quick button', { hasText: 'Kiểm quỹ' }).click();
+  await C.waitForTimeout(900);
+  const key = (k) => C.locator('.keypad .key', { hasText: new RegExp(`^${k}$`) }).first().click();
+  await key('2');
+  await C.locator('.cash-tile', { hasText: '100.000' }).click();
+  await key('5');
+  await C.locator('.cash-tile', { hasText: 'Theo sổ' }).click();
+  await key('1');
+  await key('5');
+  await key('0');
+  await key('000');
+  check('Kiểm quỹ: tổng tiền tự cộng (2×500k + 5×100k)', await has(C, '1.500.000'));
+  check('Kiểm quỹ: đọc thành chữ', await has(C, 'Một triệu năm trăm nghìn đồng'));
+  check('Kiểm quỹ: báo chênh lệch so với sổ', await has(C, 'Thừa 1.350.000'));
+  const fit = await C.evaluate(() => { const el = [...document.querySelectorAll('.scroll.fixed-body')].pop(); return el.scrollHeight <= el.clientHeight + 1; });
+  check('Kiểm quỹ vừa một màn hình, không cuộn', fit);
+  await shot(C, 'cash');
+  await C.locator('.cash-actions .btn', { hasText: 'Lưu kiểm quỹ' }).click();
+  await C.waitForTimeout(800);
+  const ta = sheet(C).locator('textarea');
+  await ta.click();
+  await ta.type('@Lê Tr');
+  await C.waitForTimeout(500);
+  check('Gõ @ hiện danh sách gắn tên', await C.locator('.mention-item', { hasText: 'Lê Trường Sơn' }).isVisible());
+  await C.locator('.mention-item', { hasText: 'Lê Trường Sơn' }).click();
+  await ta.type('mượn 200.000');
+  check('Chọn tên chèn đầy đủ "@Lê Trường Sơn"', (await ta.inputValue()).startsWith('@Lê Trường Sơn mượn'));
+  await sheet(C).locator('.btn', { hasText: 'Lưu kiểm quỹ' }).click();
+  await C.waitForTimeout(1500);
+  check('Lưu kiểm quỹ, máy đếm làm mới', await has(C, 'Đã lưu kiểm quỹ'));
+  const adminUid = (await fsQuery('users', 'email', 'admin.son@test.vn'))[0].name.split('/').pop();
+  const aNotes = await fsQuery('notifications', 'uid', adminUid);
+  check('Người được gắn tên nhận thông báo "đã nhắc đến bạn"', aNotes.some((n) => /đã nhắc đến bạn/.test(n.fields.title.stringValue) && /mượn 200.000/.test(n.fields.body.stringValue)));
+  await vis(C, '.glass-btn', 'Lịch sử').first().click();
+  await C.waitForTimeout(1200);
+  check('Lịch sử kiểm quỹ theo ngày giờ', await has(C, '1.500.000'));
+  await top(C).locator('.cell').first().click();
+  await C.waitForTimeout(1000);
+  check('Xem lại phiếu: ghi chú có tên được gắn', await has(C, '@Lê Trường Sơn'));
+  await shot(C, 'cash-detail');
+  for (let i = 0; i < 3; i++) await back(C);
+
+  await tab(A, 'Tổng quan');
+  await A.locator('.quick button', { hasText: 'Kiểm quỹ' }).click();
+  await A.waitForTimeout(800);
+  await vis(A, '.glass-btn', 'Lịch sử').first().click();
+  await A.waitForTimeout(1200);
+  check('Quản lý xem kiểm quỹ toàn kho', await has(A, 'Nguyễn Thị Hoa'));
+  await back(A);
+  await back(A);
+
+  // Bàn giao ca
+  await C.locator('.quick button', { hasText: 'Bàn giao ca' }).click();
+  await C.waitForTimeout(800);
+  await sheet(C).locator('textarea').first().fill('Khách Lan hẹn 9h mai lấy tủ lạnh Aqua');
+  await sheet(C).locator('button', { hasText: 'Giao cho' }).first().click();
+  await action(C, 'Bộ phận Quản lý');
+  await sheet(C).locator('.bottom-bar .btn').click();
+  await C.waitForTimeout(1500);
+  check('Nhân viên bàn giao ca', await has(C, 'Đã bàn giao 1 việc'));
+  await A.waitForTimeout(1500);
+  check('Bộ phận nhận thấy "Bàn giao chưa xử lý"', (await has(A, 'Bàn giao chưa xử lý')) && (await has(A, 'Khách Lan hẹn 9h mai')));
+  await vis(A, '.cell', 'Khách Lan hẹn 9h mai').first().click();
+  await A.waitForTimeout(900);
+  check('Chi tiết ghi rõ bàn giao từ ai, ca nào', await has(A, 'Bàn giao từ'));
+  await tap(A, '.btn', 'Đánh dấu hoàn tất');
+  check('Bộ phận nhận hoàn tất việc bàn giao', await has(A, 'Hoàn tất'));
+  await back(A);
+
+  // Điểm danh
+  await A.locator('.quick button', { hasText: 'Điểm danh' }).click();
+  await A.waitForTimeout(800);
+  await tap(A, '.glass-btn[aria-label="Tạo điểm danh"]');
+  await sheet(A).locator('input[placeholder^="Tiêu đề"]').fill('Thay POSM tháng 12');
+  await sheet(A).locator('input[placeholder="Việc 1"]').fill('Gỡ POSM cũ');
+  await sheet(A).locator('input[placeholder="Việc 2"]').fill('Dán POSM mới và chụp ảnh');
+  await sheetDone(A, 'Tạo');
+  check('Quản lý tạo điểm danh 2 việc', await has(A, 'Thay POSM tháng 12'));
+  await C.waitForTimeout(1500);
+  await tab(C, 'Hôm nay');
+  check('Nhân viên thấy "Cần điểm danh"', await has(C, 'Thay POSM tháng 12'));
+  await vis(C, '.cell', 'Thay POSM tháng 12').first().click();
+  await C.waitForTimeout(900);
+  await top(C).locator('.rc-item').nth(0).click();
+  await C.waitForTimeout(700);
+  check('Tích 1/2 việc chưa tính hoàn tất', !(await has(C, 'Bạn đã điểm danh hoàn tất', 800)));
+  await top(C).locator('.rc-item').nth(1).click();
+  await C.waitForTimeout(1000);
+  check('Tích đủ 2 việc thì hoàn tất điểm danh', await has(C, 'Bạn đã điểm danh hoàn tất'));
+  await shot(C, 'rollcall');
+  await back(C);
+  await vis(A, '.cell', 'Thay POSM tháng 12').first().click();
+  await A.waitForTimeout(1200);
+  check('Quản lý thấy tiến độ điểm danh theo người', (await has(A, 'Hoàn tất 1/')) && (await has(A, 'Nguyễn Thị Hoa')));
+  await back(A);
 
   await browser.close();
 

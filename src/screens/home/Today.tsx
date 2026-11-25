@@ -4,7 +4,7 @@ import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { Cell, Empty, Group, Section } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
-import { greeting, longDate, vnDate, now } from '../../lib/time';
+import { dueLabel, greeting, longDate, vnDate, now } from '../../lib/time';
 import { isActor, isOpen, sortTasks } from '../../lib/tasks';
 import { todayBoard } from '../../lib/reports';
 import { shortName } from '../../lib/text';
@@ -13,6 +13,8 @@ import { TaskDetailScreen } from '../tasks/TaskDetail';
 import { ReportDetailScreen } from '../reports/ReportDetail';
 import { PostDetailScreen } from '../library/PostDetail';
 import { AreaCard } from '../reports/AreaCard';
+import { QuickActions } from './QuickActions';
+import { RollcallDetailScreen, myPendingRollcalls } from '../rollcall/Rollcall';
 
 export function TodayScreen({ goTab }: { goTab: (k: string) => void }) {
   const s = useSession();
@@ -23,8 +25,10 @@ export function TodayScreen({ goTab }: { goTab: (k: string) => void }) {
 
   const myAreas = useMemo(() => (s.store ? todayBoard(d.areas, d.reports, s.store, d.leaves).filter((x) => x.responsible === me.uid) : []), [d, s.store, me.uid]);
 
-  const mine = sortTasks(d.tasks.filter((t) => t.scope === 'personal' && t.assigneeUid === me.uid && isOpen(t, me.uid)));
-  const group = sortTasks(d.tasks.filter((t) => t.scope !== 'personal' && isActor(t, me) && isOpen(t, me.uid) && (!t.dueAt || vnDate(t.dueAt) <= vnDate(now() + 2 * 86400000))));
+  const handovers = sortTasks(d.tasks.filter((t) => t.kind === 'handover' && isActor(t, me) && isOpen(t, me.uid)));
+  const rollcalls = myPendingRollcalls(d.rollcalls, me).sort((a, b) => (a.dueAt || Infinity) - (b.dueAt || Infinity));
+  const mine = sortTasks(d.tasks.filter((t) => t.kind !== 'handover' && t.scope === 'personal' && t.assigneeUid === me.uid && isOpen(t, me.uid)));
+  const group = sortTasks(d.tasks.filter((t) => t.kind !== 'handover' && t.scope !== 'personal' && isActor(t, me) && isOpen(t, me.uid) && (!t.dueAt || vnDate(t.dueAt) <= vnDate(now() + 2 * 86400000))));
   const doneToday = d.tasks.filter((t) => isActor(t, me) && !isOpen(t, me.uid) && ((t.completedAt && vnDate(t.completedAt) === today) || (t.completions?.[me.uid] && vnDate(t.completions[me.uid]) === today))).length;
   const acks = d.posts.filter((p) => p.requireAck && (!p.acks?.[me.uid] || p.acks[me.uid].v < p.version) && (p.audience.type === 'all' || (p.audience.type === 'department' && p.audience.value === me.department) || (p.audience.type === 'brand' && p.audience.value === me.brand) || (p.audience.type === 'role' && p.audience.value === me.role)));
 
@@ -32,6 +36,35 @@ export function TodayScreen({ goTab }: { goTab: (k: string) => void }) {
     <Page title="Hôm nay" kicker={`${greeting()}, ${shortName(me.fullName)} · ${longDate()}`} right={<NavActions />}>
       <InstallBanner />
       <PushBanner />
+      <QuickActions />
+
+      {handovers.length > 0 && (
+        <Section title="Được bàn giao" action={`${handovers.length}`}>
+          <Group>
+            {handovers.map((t) => (
+              <TaskRow key={t.id} task={t} onOpen={() => nav.push(<TaskDetailScreen id={t.id} />)} />
+            ))}
+          </Group>
+        </Section>
+      )}
+
+      {rollcalls.length > 0 && (
+        <Section title="Cần điểm danh" action={`${rollcalls.length}`}>
+          <Group>
+            {rollcalls.map((r) => (
+              <Cell
+                key={r.id}
+                icon="hand"
+                iconColor="indigo"
+                title={r.title}
+                sub={`${Object.keys(r.progress?.[me.uid]?.items || {}).length}/${r.items.length} việc${r.dueAt ? ` · Hạn ${dueLabel(r.dueAt)}` : ''}`}
+                chevron
+                onClick={() => nav.push(<RollcallDetailScreen id={r.id} />)}
+              />
+            ))}
+          </Group>
+        </Section>
+      )}
 
       <Section title="Báo cáo 8NTTT" action={myAreas.length ? undefined : 'Xem'} onAction={() => goTab('reports')}>
         {myAreas.length ? (
@@ -80,7 +113,7 @@ export function TodayScreen({ goTab }: { goTab: (k: string) => void }) {
         </Section>
       )}
 
-      {!mine.length && !group.length && !acks.length && myAreas.every((a) => a.status === 'ontime' || a.status === 'late') && (
+      {!mine.length && !group.length && !acks.length && !handovers.length && !rollcalls.length && myAreas.every((a) => a.status === 'ontime' || a.status === 'late') && (
         <Empty icon="sun" title="Bạn đã xong mọi việc" text="Việc mới được giao sẽ hiện ở đây và có thông báo nhắc." />
       )}
     </Page>

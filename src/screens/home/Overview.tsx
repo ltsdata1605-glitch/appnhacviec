@@ -5,7 +5,7 @@ import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
 import { Avatar, Cell, Group, Pill, Ring, Section } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
-import { longDate, monthRange, vnDate, now, duration, vnAt } from '../../lib/time';
+import { dueLabel, longDate, monthRange, vnDate, now, duration, vnAt } from '../../lib/time';
 import { isOpen, sortTasks, taskState } from '../../lib/tasks';
 import { personStats, todayBoard } from '../../lib/reports';
 import { notify } from '../../lib/actions';
@@ -14,6 +14,9 @@ import { TaskDetailScreen } from '../tasks/TaskDetail';
 import { PersonReportsScreen } from '../reports/PersonReports';
 import { ReportDetailScreen } from '../reports/ReportDetail';
 import { AreasScreen } from '../people/Areas';
+import { QuickActions } from './QuickActions';
+import { RollcallDetailScreen } from '../rollcall/Rollcall';
+import { inAudience, rollcallDone } from '../../lib/actions';
 
 export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
   const s = useSession();
@@ -36,6 +39,11 @@ export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
   const todayDone = todayTasks.filter((t) => t.status === 'done' || t.status === 'pending_review').length;
   const overdueTasks = sortTasks(d.tasks.filter((t) => isOpen(t) && taskState(t) === 'overdue'));
   const reviewTasks = d.tasks.filter((t) => t.status === 'pending_review');
+  const openHandovers = sortTasks(d.tasks.filter((t) => t.kind === 'handover' && isOpen(t)));
+  const openRollcalls = d.rollcalls.filter((r) => !r.closed).map((r) => {
+    const aud = d.active.filter((m) => inAudience(r.audience, m));
+    return { r, total: aud.length, done: aud.filter((m) => rollcallDone(r, m.uid)).length };
+  });
 
   const monthStats = useMemo(() => {
     if (!store) return [];
@@ -76,6 +84,7 @@ export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
       )}
       <InstallBanner />
       <PushBanner />
+      <QuickActions />
 
       <Section>
         <div className="stat-grid">
@@ -154,6 +163,38 @@ export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
                 />
               );
             })}
+          </Group>
+        </Section>
+      )}
+
+      {openHandovers.length > 0 && (
+        <Section title="Bàn giao chưa xử lý" action={`${openHandovers.length}`}>
+          <Group>
+            {openHandovers.slice(0, 6).map((t) => (
+              <TaskRow key={t.id} task={t} onOpen={() => nav.push(<TaskDetailScreen id={t.id} />)} />
+            ))}
+          </Group>
+        </Section>
+      )}
+
+      {openRollcalls.length > 0 && (
+        <Section title="Điểm danh đang mở">
+          <Group>
+            {openRollcalls.map(({ r, total, done }) => (
+              <Cell
+                key={r.id}
+                leading={
+                  <Ring value={done} total={total || 1} size={40} width={5} color="var(--indigo)">
+                    <span className="t-cap2 semibold tnum">{done}</span>
+                  </Ring>
+                }
+                sepInset={68}
+                title={r.title}
+                sub={`${done}/${total} người hoàn tất${r.dueAt ? ` · Hạn ${dueLabel(r.dueAt)}` : ''}`}
+                chevron
+                onClick={() => nav.push(<RollcallDetailScreen id={r.id} />)}
+              />
+            ))}
           </Group>
         </Section>
       )}

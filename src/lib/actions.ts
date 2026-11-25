@@ -4,6 +4,7 @@ import { now, vnDate, vnTime } from './time';
 import { capitalizeCode, collapse, storeCodeOf, titleCase } from './text';
 import { defaultStore, ROLE_LABEL } from './constants';
 import { isActor } from './tasks';
+import { extractMentions } from './mentions';
 import { reportId } from './reports';
 import type {
   Activity,
@@ -12,8 +13,10 @@ import type {
   Chain,
   ChecklistItem,
   CompletionMode,
+  CashCount,
   Leave,
   NotifyLevel,
+  Rollcall,
   Photo,
   Post,
   Priority,
@@ -256,6 +259,7 @@ export async function createTasks(input: TaskInput, storeCode: string, by: Actor
     updatedAt: t,
     templateId: input.templateId || null,
     reminded: {},
+    mentions: extractMentions(input.note, members),
   };
   const ops: BatchOp[] = [];
   let recipients: string[] = [];
@@ -285,6 +289,8 @@ export async function createTasks(input: TaskInput, storeCode: string, by: Actor
     link,
     level: input.priority,
   });
+  const extra = base.mentions.filter((u) => !recipients.includes(u));
+  if (extra.length) await notifyMentions(extra, storeCode, by, `việc “${base.title}”`, base.note, link);
   return ops.map((o) => o.id);
 }
 
@@ -354,9 +360,10 @@ export async function returnTask(task: Task, by: Actor, reason: string) {
   if (task.completedBy) await notify([task.completedBy], task.storeCode, by, { title: 'Việc bị trả lại', body: `${task.title} — ${reason}`, link: `task:${task.id}`, level: 'high' });
 }
 
-export async function commentTask(task: Task, by: Actor, text: string, notifyUids: string[]) {
+export async function commentTask(task: Task, by: Actor, text: string, notifyUids: string[], mentioned: string[] = []) {
   await api().update('tasks', task.id, { updatedAt: now(), activity: F.arrayUnion(activity('comment', by, text.trim())) });
-  await notify(notifyUids, task.storeCode, by, { title: `${by.name} đã bình luận`, body: `${task.title}: ${text.trim()}`, link: `task:${task.id}` });
+  await notify(notifyUids.filter((u) => !mentioned.includes(u)), task.storeCode, by, { title: `${by.name} đã bình luận`, body: `${task.title}: ${text.trim()}`, link: `task:${task.id}` });
+  if (mentioned.length) await notifyMentions(mentioned, task.storeCode, by, `việc “${task.title}”`, text.trim(), `task:${task.id}`);
 }
 
 export async function nudgeTask(task: Task, by: Actor, uids: string[]) {
@@ -504,4 +511,167 @@ export async function updateStore(code: string, patch: Partial<Store>) {
 export async function createStore(code: string, name: string, chain: Chain) {
   const c = storeCodeOf(code);
   await api().set('stores', c, { ...defaultStore(c, collapse(name), chain), createdAt: now() });
+}
+
+// ---------------- Gắn tên @ ----------------
+export async function notifyMentions(
+  uids: string[],
+  storeCode: string,
+  by: Actor,
+  where: string, // "kiểm quỹ", "bình luận công việc"...
+  text: string,
+  link?: string,
+) {
+  const snippet = text.length > 140 ? `${text.slice(0, 137)}…` : text;
+  await notify(uids, storeCode, by, { title: `${by.name} đã nhắc đến bạn`, body: `Trong ${where}: “${snippet}”`, link, level: 'high' });
+}
+
+// ---------------- Kiểm quỹ ----------------
+export async function saveCashCount(c: Omit<CashCount, 'id' | 'createdAt' | 'date'>) {
+  const id = api().newId();
+  const t = now();
+  await api().set('cashCounts', id, { ...c, createdAt: t, date: vnDate(t) });
+  if (c.mentions.length && c.note.trim()) {
+    await notifyMentions(c.mentions, c.storeCode, { uid: c.createdBy, name: c.createdByName }, `kiểm quỹ “${c.name}”`, c.note.trim(), `cash:${id}`);
+  }
+  return id;
+}
+
+export async function deleteCashCount(id: string) {
+  await api().remove('cashCounts', id);
+}
+
+// ---------------- Bàn giao ca ----------------
+export interface HandoverItem {
+  text: string;
+  target: { type: 'department' | 'person' | 'store'; value: string }; // value: tên bộ phận hoặc uid
+  urgent: boolean;
+}
+
+export async function submitHandover(storeCode: string, by: Actor, shift: string, items: HandoverItem[], members: UserProfile[], dueAt: number) {
+  const t = now();
+  const handoverId = api().newId();
+  const handover = { id: handoverId, shift, fromUid: by.uid, fromName: by.name, at: t };
+  const ops: BatchOp[] = [];
+  const notes: { uids: string[]; title: string; body: string; link: string; level: NotifyLevel }[] = [];
+  for (const it of items) {
+    const text = it.text.trim();
+    if (!text) continue;
+    const id = api().newId();
+    const personal = it.target.type === 'person';
+    const m = personal ? members.find((x) => x.uid === it.target.value) : undefined;
+    const data = {
+      storeCode,
+      kind: 'handover',
+      handover,
+      shared: !personal,
+      scope: personal ? 'personal' : it.target.type === 'department' ? 'department' : 'store',
+      assigneeUid: personal ? it.target.value : null,
+      assigneeName: m?.fullName || null,
+      department: it.target.type === 'department' ? it.target.value : null,
+      brand: null,
+      title: text.split('\n')[0].slice(0, 120),
+      note: text,
+      priority: it.urgent ? 'urgent' : 'high',
+      dueAt,
+      remindBefore: 60,
+      checklist: [],
+      requirePhoto: false,
+      requireApproval: false,
+      completionMode: 'any',
+      status: 'open',
+      activity: [{ type: 'created', uid: by.uid, name: by.name, at: t, note: `Bàn giao ${shift}` }],
+      seenBy: {},
+      completions: {},
+      mentions: extractMentions(text, members),
+      createdBy: by.uid,
+      createdByName: by.name,
+      createdAt: t,
+      updatedAt: t,
+      reminded: {},
+    } as unknown as Record<string, unknown>;
+    ops.push({ type: 'set', col: 'tasks', id, data });
+    const recipients = personal
+      ? [it.target.value]
+      : members.filter((x) => x.status === 'active' && isActor(data as unknown as Task, x)).map((x) => x.uid);
+    const mentioned = (data.mentions as string[]).filter((u) => !recipients.includes(u));
+    notes.push({ uids: [...recipients, ...mentioned], title: `Bàn giao từ ${by.name}`, body: `${text.split('\n')[0]} · ${shift}`, link: `task:${id}`, level: it.urgent ? 'urgent' : 'high' });
+  }
+  if (!ops.length) return 0;
+  await api().batch(ops);
+  for (const n of notes) await notify(n.uids, storeCode, by, { title: n.title, body: n.body, link: n.link, level: n.level });
+  return ops.length;
+}
+
+// ---------------- Điểm danh ----------------
+export function inAudience(a: Rollcall['audience'], u: UserProfile): boolean {
+  if (u.status !== 'active') return false;
+  switch (a.type) {
+    case 'all':
+      return true;
+    case 'department':
+      return u.department === a.value;
+    case 'brand':
+      return u.role === 'pg' && u.brand === a.value;
+    case 'role':
+      return u.role === a.value;
+    case 'people':
+      return (a.uids || []).includes(u.uid);
+  }
+}
+
+export function rollcallDone(rc: Rollcall, uid: string): boolean {
+  return !!rc.progress?.[uid]?.doneAt;
+}
+
+export async function saveRollcall(rc: Partial<Rollcall> & { storeCode: string }, by: Actor, members: UserProfile[]) {
+  const t = now();
+  const isNew = !rc.id;
+  const id = rc.id || api().newId();
+  const data = {
+    media: [],
+    items: [],
+    progress: {},
+    remindBefore: 60,
+    ...rc,
+    id,
+    mentions: extractMentions(rc.body || '', members),
+    createdBy: rc.createdBy || by.uid,
+    createdByName: rc.createdByName || by.name,
+    createdAt: rc.createdAt || t,
+    updatedAt: t,
+    reminded: isNew ? {} : rc.reminded || {},
+  };
+  await api().set('rollcalls', id, data as Record<string, unknown>);
+  if (isNew) {
+    const audience = members.filter((m) => inAudience(data.audience as Rollcall['audience'], m)).map((m) => m.uid);
+    const due = data.dueAt ? ` · Hạn ${dueText(data.dueAt as number)}` : '';
+    await notify(audience, rc.storeCode, by, { title: `Điểm danh mới · ${data.title}`, body: `${(data.items as unknown[]).length} việc cần xác nhận${due}`, link: `rollcall:${id}`, level: 'high' });
+    const extra = (data.mentions as string[]).filter((u) => !audience.includes(u));
+    if (extra.length) await notifyMentions(extra, rc.storeCode, by, `điểm danh “${data.title}”`, (data.body as string) || '', `rollcall:${id}`);
+  }
+  return id;
+}
+
+export async function toggleRollcallItem(rc: Rollcall, itemId: string, by: Actor) {
+  const mine = rc.progress?.[by.uid] || { items: {}, name: by.name };
+  const items = { ...mine.items };
+  if (items[itemId]) delete items[itemId];
+  else items[itemId] = now();
+  const allDone = rc.items.every((i) => items[i.id]);
+  await api().update('rollcalls', rc.id, { [`progress.${by.uid}`]: { items, name: by.name, doneAt: allDone ? now() : null } });
+  return allDone;
+}
+
+export async function nudgeRollcall(rc: Rollcall, by: Actor, uids: string[]) {
+  await notify(uids, rc.storeCode, by, { title: 'Nhắc điểm danh', body: `${by.name} nhắc bạn hoàn tất: ${rc.title}`, link: `rollcall:${rc.id}`, level: 'high' });
+}
+
+export async function closeRollcall(rc: Rollcall, closed: boolean) {
+  await api().update('rollcalls', rc.id, { closed, updatedAt: now() });
+}
+
+export async function deleteRollcall(rc: Rollcall) {
+  for (const m of rc.media) if (m.path) await api().removeFile(m.path);
+  await api().remove('rollcalls', rc.id);
 }

@@ -8,7 +8,9 @@ import { Icon } from '../../ui/Icon';
 import { dmy, stamp, vnDate, vnTime } from '../../lib/time';
 import { isLate } from '../../lib/reports';
 import { formatDistance } from '../../lib/geo';
-import { reviewReport } from '../../lib/actions';
+import { notifyMentions, reviewReport } from '../../lib/actions';
+import { extractMentions } from '../../lib/mentions';
+import { MentionInput, MentionText } from '../../ui/Mention';
 import { useActor } from '../shared';
 import { useCapture } from './Capture';
 import type { Photo, Report } from '../../lib/types';
@@ -41,6 +43,8 @@ export function ReportDetailScreen({ id }: { id: string }) {
   const fail = () =>
     ui.sheet((close) => <FailSheet criteria={criteria} checks={r.checks} close={close} onSubmit={async (failed, note) => {
       await reviewReport(r, actor, 'fail', failed, note);
+      const tagged = extractMentions(note, d.active).filter((u) => u !== actor.uid && u !== r.uid);
+      if (tagged.length) await notifyMentions(tagged, r.storeCode, actor, `chấm báo cáo 8NTTT ${r.areaName}`, note.trim(), `report:${r.id}`);
       ui.toast({ text: 'Đã yêu cầu chụp lại', icon: 'retake', color: 'red' });
     }} />);
 
@@ -150,7 +154,9 @@ export function ReportDetailScreen({ id }: { id: string }) {
 
       {r.note && (
         <Section title="Ghi chú của nhân viên" small>
-          <div className="card t-body">{r.note}</div>
+          <div className="card t-body">
+            <MentionText text={r.note} />
+          </div>
         </Section>
       )}
 
@@ -207,7 +213,7 @@ function FailSheet({ criteria, checks, close, onSubmit }: { criteria: string[]; 
       <div className="sheet-body">
         <Section title="Nhận xét" small footer="Nhân viên sẽ nhận thông báo và chụp lại báo cáo.">
           <Group>
-            <textarea className="textarea" placeholder="Ví dụ: Còn bụi mặt kệ, thiếu bảng giá tivi 55 inch" value={note} onChange={(e) => setNote(e.target.value)} rows={3} autoFocus />
+            <MentionInput multiline rows={3} className="textarea" placeholder="Ví dụ: Còn bụi mặt kệ, thiếu bảng giá tivi 55 inch" value={note} onChange={setNote} autoFocus below />
           </Group>
         </Section>
         {criteria.length > 0 && (

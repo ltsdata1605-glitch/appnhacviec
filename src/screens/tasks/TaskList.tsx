@@ -130,7 +130,7 @@ export function TaskListScreen() {
       title="Công việc"
       right={
         <>
-          {canAssign && (
+          {(canAssign || s.profile?.status === 'active') && (
             <button className="glass-btn icon prominent" onClick={compose} aria-label="Giao việc mới">
               <Icon name="plus" size={22} stroke={2.4} />
             </button>
@@ -157,7 +157,7 @@ export function TaskListScreen() {
         <Empty
           icon={seg === 'done' ? 'checklist' : 'check'}
           title={seg === 'done' ? 'Chưa có việc hoàn tất' : seg === 'review' ? 'Không có việc chờ duyệt' : q ? 'Không tìm thấy' : 'Không có việc cần làm'}
-          text={canAssign && seg !== 'done' && !q ? 'Chạm nút + để giao việc cho cá nhân, bộ phận hoặc toàn siêu thị.' : undefined}
+          text={seg !== 'done' && !q ? (canAssign ? 'Chạm nút + để giao việc cho cá nhân, bộ phận hoặc toàn siêu thị.' : 'Chạm nút + để giao việc cho đồng nghiệp.') : undefined}
         />
       ) : (
         groups.map((g) => (

@@ -6,7 +6,8 @@ export type UserStatus = 'pending' | 'active' | 'rejected' | 'disabled';
 export type Chain = 'TGDD' | 'DMX' | 'TOPZONE';
 
 export interface Permissions {
-  assign?: boolean; // Giao việc
+  assign?: boolean; // Giao việc cho bộ phận / toàn siêu thị, tạo điểm danh (giao việc cá nhân: mọi người đều được)
+  cash?: boolean; // Xem toàn bộ lịch sử kiểm quỹ của kho
   library?: boolean; // Đăng thư viện
   review?: boolean; // Xem & chấm báo cáo ảnh
   approve?: boolean; // Duyệt nhân viên mới
@@ -145,8 +146,13 @@ export interface Activity {
   note?: string;
 }
 
+export type TaskKind = 'task' | 'handover';
+
 export interface Task {
   id: string;
+  kind?: TaskKind; // 'handover' = việc bàn giao cuối ca
+  handover?: { id: string; shift: string; fromUid: string; fromName: string; at: number } | null;
+  mentions?: string[];
   storeCode: string;
   shared: boolean; // true nếu không phải việc cá nhân
   scope: TaskScope;
@@ -285,4 +291,58 @@ export interface AuthUser {
   email: string;
   displayName: string;
   photoURL?: string;
+}
+
+// ---------------- Kiểm quỹ ----------------
+export interface CashCount {
+  id: string;
+  storeCode: string;
+  name: string; // tên lần kiểm, ví dụ "Ca sáng 25/11"
+  counts: Record<string, number>; // mệnh giá → số tờ
+  other: number; // tiền khác (xu, tiền lẻ ngoài bảng)
+  total: number;
+  sheets: number;
+  expected: number | null; // số tiền theo sổ / hệ thống
+  diff: number | null; // total - expected
+  note: string;
+  mentions: string[];
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+  date: string;
+}
+
+// ---------------- Điểm danh ----------------
+export interface Media {
+  type: 'image' | 'video' | 'link' | 'file';
+  url: string;
+  name?: string;
+  path?: string;
+  thumbUrl?: string;
+}
+
+export interface RollcallAudience {
+  type: 'all' | 'department' | 'brand' | 'role' | 'people';
+  value?: string | null;
+  uids?: string[];
+}
+
+export interface Rollcall {
+  id: string;
+  storeCode: string;
+  title: string;
+  body: string;
+  media: Media[];
+  items: { id: string; text: string }[];
+  audience: RollcallAudience;
+  dueAt: number | null;
+  remindBefore: number | null; // phút
+  progress: Record<string, { items: Record<string, number>; doneAt?: number | null; name: string }>;
+  mentions?: string[];
+  createdBy: string;
+  createdByName: string;
+  createdAt: number;
+  updatedAt: number;
+  closed?: boolean;
+  reminded?: { before?: boolean; due?: boolean };
 }

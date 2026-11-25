@@ -35,6 +35,14 @@ service firebase.storage {
       allow delete: if can(store, 'library');
     }
 
+    // Hình, video hướng dẫn của điểm danh
+    match /rollcalls/{store}/{file} {
+      allow read: if inStore(store);
+      allow create: if can(store, 'assign') && request.resource.size < 100 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('video/.*'));
+      allow delete: if can(store, 'assign');
+    }
+
     // Ảnh chuẩn khu vực
     match /areas/{store}/{file} {
       allow read: if inStore(store);

@@ -219,6 +219,7 @@ export function TaskRow({ task, onOpen, showTarget = true }: { task: Task; onOpe
             </span>
           )}
           {showTarget && <span className="t-foot c2">{task.dueAt ? '· ' : ''}{targetLabel(task)}</span>}
+          {task.handover && <span className="t-foot c2">· từ {task.handover.fromName}</span>}
           {task.checklist.length > 0 && (
             <span className="t-foot c2">
               · {checklistDone}/{task.checklist.length}
@@ -229,6 +230,11 @@ export function TaskRow({ task, onOpen, showTarget = true }: { task: Task; onOpe
           {task.activity.some((a) => a.type === 'comment') && <Icon name="message" size={14} className="c3" />}
         </div>
       </div>
+      {task.kind === 'handover' && st !== 'review' && st !== 'returned' && (
+        <Pill sm color="orange" icon="handover">
+          Bàn giao
+        </Pill>
+      )}
       {(st === 'review' || st === 'returned') && <Pill sm color={meta.color}>{meta.label}</Pill>}
     </div>
   );

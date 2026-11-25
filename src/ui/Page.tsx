@@ -14,10 +14,12 @@ interface PageProps {
   noTab?: boolean;
   headerExtra?: ReactNode; // nội dung ngay dưới tiêu đề lớn (vd thanh tìm kiếm)
   onScrollEnd?: () => void;
+  /** Màn hình cố định, không cuộn (ví dụ Kiểm quỹ) */
+  fixed?: boolean;
 }
 
 /** Trang có thanh điều hướng tiêu đề lớn tự thu gọn khi cuộn. */
-export function Page({ title, kicker, large = true, left, right, back, children, footer, noTab, headerExtra }: PageProps) {
+export function Page({ title, kicker, large = true, left, right, back, children, footer, noTab, headerExtra, fixed }: PageProps) {
   const nav = useOptionalNav();
   const [scrolled, setScrolled] = useState(!large);
   const scroller = useRef<HTMLDivElement>(null);
@@ -47,7 +49,7 @@ export function Page({ title, kicker, large = true, left, right, back, children,
           <div className="navbar-side right">{right}</div>
         </div>
       </div>
-      <div ref={scroller} className={`scroll${noTab || index > 0 ? ' no-tab' : ''}`} onScroll={onScroll} style={footer ? { paddingBottom: 'calc(var(--safe-bottom) + 110px)' } : undefined}>
+      <div ref={scroller} className={`scroll${noTab || index > 0 ? ' no-tab' : ''}${fixed ? ' fixed-body' : ''}`} onScroll={onScroll} style={footer ? { paddingBottom: 'calc(var(--safe-bottom) + 110px)' } : undefined}>
         {large ? (
           <div className="large-title">
             {kicker && <div className="kicker">{kicker}</div>}

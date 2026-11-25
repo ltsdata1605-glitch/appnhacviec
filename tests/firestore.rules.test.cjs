@@ -1,6 +1,6 @@
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
 const fs = require('fs');
-const { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteField } = require('firebase/firestore');
+const { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs } = require('firebase/firestore');
 
 const VN = 7 * 3600000;
 const vnDate = (ms) => { const d = new Date(ms + VN); return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`; };
@@ -90,6 +90,34 @@ async function t(name, p) { try { await p; pass++; console.log('  ✓', name); }
   await t('NV gửi thông báo trong kho', assertSucceeds(setDoc(doc(kho, 'notifications/z1'), { uid: 'thungan', storeCode: '1234', fromUid: 'kho', fromName: 'kho', title: 'a', body: 'b', read: false, createdAt: now })));
   await t('Không gửi thông báo sang kho khác', assertFails(setDoc(doc(kho, 'notifications/z2'), { uid: 'mgr2', storeCode: '5678', fromUid: 'kho', fromName: 'kho', title: 'a', body: 'b', read: false, createdAt: now })));
   await t('Không đọc thông báo của người khác', assertFails(getDoc(doc(kho, 'notifications/z1'))));
+
+  console.log('Kiểm quỹ');
+  const cash = (by, extra = {}) => ({ storeCode: '1234', name: 'Ca sáng', counts: { '500000': 2 }, other: 0, total: 1000000, sheets: 2, expected: null, diff: null, note: '', mentions: [], createdBy: by, createdByName: by, createdAt: Date.now(), date: today, ...extra });
+  await t('NV lưu kiểm quỹ của mình', assertSucceeds(setDoc(doc(thungan, 'cashCounts/c1'), cash('thungan', { mentions: ['kho'], note: '@kho mượn 200.000' }))));
+  await t('Không lưu kiểm quỹ đứng tên người khác', assertFails(setDoc(doc(thungan, 'cashCounts/c2'), cash('kho'))));
+  await t('Phiếu kiểm quỹ không sửa được', assertFails(updateDoc(doc(thungan, 'cashCounts/c1'), { total: 1 })));
+  await t('Người được gắn tên xem được phiếu', assertSucceeds(getDoc(doc(kho, 'cashCounts/c1'))));
+  await t('NV khác không xem được phiếu', assertFails(getDoc(doc(lead, 'cashCounts/c1'))));
+  await t('QL xem được phiếu', assertSucceeds(getDoc(doc(mgr, 'cashCounts/c1'))));
+  await t('QL kho khác không xem được', assertFails(getDoc(doc(mgr2, 'cashCounts/c1'))));
+  await t('NV xoá phiếu: bị chặn', assertFails(deleteDoc(doc(thungan, 'cashCounts/c1'))));
+
+  console.log('Giao việc cá nhân & bàn giao ca');
+  await t('NV không có quyền vẫn giao việc cá nhân', assertSucceeds(setDoc(doc(thungan, 'tasks/pt1'), { storeCode: '1234', shared: false, scope: 'personal', assigneeUid: 'kho', title: 'Nhờ lấy hàng', status: 'open', createdBy: 'thungan', createdAt: now, activity: [] })));
+  await t('NV không giao việc đứng tên người khác', assertFails(setDoc(doc(thungan, 'tasks/pt2'), { storeCode: '1234', shared: false, scope: 'personal', assigneeUid: 'kho', title: 'x', status: 'open', createdBy: 'mgr', createdAt: now, activity: [] })));
+  await t('NV bàn giao ca cho bộ phận Kho', assertSucceeds(setDoc(doc(thungan, 'tasks/hv1'), { storeCode: '1234', kind: 'handover', shared: true, scope: 'department', department: 'Kho', title: 'Hàng chưa nhập', status: 'open', createdBy: 'thungan', createdAt: now, activity: [] })));
+  await t('NV không có quyền không giao việc bộ phận thường', assertFails(setDoc(doc(thungan, 'tasks/dt1'), { storeCode: '1234', shared: true, scope: 'department', department: 'Kho', title: 'x', status: 'open', createdBy: 'thungan', createdAt: now, activity: [] })));
+  await t('Bộ phận Kho hoàn tất việc được bàn giao', assertSucceeds(updateDoc(doc(kho, 'tasks/hv1'), { status: 'done', completedBy: 'kho', completedByName: 'kho', completedAt: now, updatedAt: now })));
+  await t('Người giao sửa việc mình giao', assertSucceeds(updateDoc(doc(thungan, 'tasks/pt1'), { title: 'Nhờ lấy hàng giúp' })));
+
+  console.log('Điểm danh');
+  const rc = { storeCode: '1234', title: 'Triển khai CTKM', body: '', media: [], items: [{ id: 'i1', text: 'A' }, { id: 'i2', text: 'B' }], audience: { type: 'all' }, dueAt: now + 3600000, remindBefore: 30, progress: {}, createdBy: 'mgr', createdByName: 'mgr', createdAt: now, updatedAt: now };
+  await t('QL tạo điểm danh', assertSucceeds(setDoc(doc(mgr, 'rollcalls/r1'), rc)));
+  await t('NV không có quyền không tạo điểm danh', assertFails(setDoc(doc(thungan, 'rollcalls/r2'), { ...rc, createdBy: 'thungan' })));
+  await t('NV tích việc của mình', assertSucceeds(updateDoc(doc(kho, 'rollcalls/r1'), { 'progress.kho': { items: { i1: now }, name: 'kho', doneAt: null } })));
+  await t('NV không tích hộ người khác', assertFails(updateDoc(doc(kho, 'rollcalls/r1'), { 'progress.thungan': { items: { i1: now }, name: 'x', doneAt: now } })));
+  await t('NV không sửa nội dung điểm danh', assertFails(updateDoc(doc(kho, 'rollcalls/r1'), { title: 'x' })));
+  await t('Kho khác không xem điểm danh', assertFails(getDoc(doc(mgr2, 'rollcalls/r1'))));
 
   console.log(`\n${pass} đạt, ${fail} lỗi`);
   await env.cleanup();

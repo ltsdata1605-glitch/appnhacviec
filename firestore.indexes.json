@@ -201,6 +201,66 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "cashCounts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cashCounts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdBy",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cashCounts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mentions",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "rollcalls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

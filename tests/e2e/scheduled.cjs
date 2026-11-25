@@ -92,6 +92,8 @@ async function trigger(fn) {
   await put('tasks/urgSeen', { ...base, title: 'Khẩn đã xem', priority: 'urgent', dueAt: null, createdAt: now - 6 * 60000, seenBy: { s930: now - 60000 } });
   await put('tasks/high', { ...base, title: 'Cao chưa xem', priority: 'high', dueAt: null, createdAt: now - 20 * 60000 });
   await put('tasks/highNew', { ...base, title: 'Cao mới giao', priority: 'high', dueAt: null, createdAt: now - 2 * 60000 });
+  await put('rollcalls/rcSoon', { storeCode: '930', title: 'Điểm danh sắp hạn', body: '', media: [], items: [{ id: 'i1', text: 'A' }], audience: { type: 'all' }, dueAt: now + 20 * 60000, remindBefore: 30, progress: {}, createdBy: 'm930', createdAt: now - 3600000, reminded: {} });
+  await put('rollcalls/rcLate', { storeCode: '930', title: 'Điểm danh quá hạn', body: '', media: [], items: [{ id: 'i1', text: 'A' }], audience: { type: 'all' }, dueAt: now - 10 * 60000, remindBefore: 30, progress: { m930: { items: { i1: now }, doneAt: now, name: 'QL' } }, createdBy: 'm930', createdAt: now - 3600000, reminded: { before: true } });
   await put('taskTemplates/tplA', {
     storeCode: '930', title: 'Kiểm quỹ đầu ca', scope: 'department', department: 'Kho', priority: 'normal', checklist: ['Đếm tiền'],
     requirePhoto: false, requireApproval: false, completionMode: 'any', remindBefore: 15, recurrence: { type: 'daily', time: '08:30' }, active: true, lastGenerated: null, createdBy: 'm930', createdAt: now,
@@ -119,6 +121,10 @@ async function trigger(fn) {
   check('Nhắc lại việc Ưu tiên cao chưa xem sau 15 phút', s.some((n) => n.title === 'Việc quan trọng chưa xem' && n.body.includes('Cao chưa xem') && n.level === 'high'));
   check('Chưa nhắc lại việc Ưu tiên cao mới giao 2 phút', !s.some((n) => n.body.includes('Cao mới giao')));
   check('Nhắc hạn mang đúng mức độ (Đã đến hạn → Ưu tiên cao)', s.some((n) => n.title === 'Đã đến hạn' && n.level === 'high'));
+  check('Nhắc điểm danh sắp hết hạn', s.some((n) => n.title === 'Sắp hết hạn điểm danh' && n.body.includes('Điểm danh sắp hạn')));
+  check('Báo nhân viên điểm danh đã quá hạn (Khẩn)', s.some((n) => n.title === 'Đã hết hạn điểm danh' && n.level === 'urgent'));
+  check('Báo quản lý danh sách chưa điểm danh', m.some((n) => /chưa điểm danh/.test(n.title) && n.body.includes('Nhân Viên Ba')));
+  check('Không nhắc người đã điểm danh xong', !m.some((n) => n.title === 'Đã hết hạn điểm danh'));
   const before = s.length;
   await trigger('every5Minutes');
   await sleep(300);

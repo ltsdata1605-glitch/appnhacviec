@@ -12,6 +12,8 @@ import { api } from '../../lib/backend';
 import { approveTask, commentTask, completeTask, deleteTask, markSeen, nudgeTask, reopenTask, returnTask, toggleChecklist } from '../../lib/actions';
 import { useActor } from '../shared';
 import { useProofCamera } from '../reports/Capture';
+import { MentionInput, MentionText } from '../../ui/Mention';
+import { extractMentions } from '../../lib/mentions';
 import { PhotoViewer } from '../reports/ReportDetail';
 import { TaskEditor } from './TaskEditor';
 import type { Activity, Photo, Task } from '../../lib/types';
@@ -122,7 +124,7 @@ export function TaskDetailScreen({ id }: { id: string }) {
   const sendComment = async () => {
     if (!comment.trim()) return;
     const to = [t.createdBy, ...(t.scope === 'personal' ? [t.assigneeUid!] : []), ...t.activity.filter((a) => a.type === 'comment').map((a) => a.uid)];
-    await commentTask(t, actor, comment, to);
+    await commentTask(t, actor, comment, to, extractMentions(comment, d.active).filter((u) => u !== actor.uid));
     setComment('');
   };
 
@@ -189,9 +191,20 @@ export function TaskDetailScreen({ id }: { id: string }) {
         <div className="t-title2 mt12" style={{ userSelect: 'text' }}>
           {t.title}
         </div>
-        {t.note && (
-          <div className="t-body mt8" style={{ whiteSpace: 'pre-wrap', userSelect: 'text' }}>
-            {t.note}
+        {t.note && t.note !== t.title && (
+          <div className="t-body mt8" style={{ userSelect: 'text' }}>
+            <MentionText text={t.note} />
+          </div>
+        )}
+        {t.handover && (
+          <div className="notice mt12">
+            <span className="notice-icon bg-orange">
+              <Icon name="handover" size={18} />
+            </span>
+            <div className="t-sub">
+              Bàn giao từ <b>{t.handover.fromName}</b> · {t.handover.shift}
+              <div className="t-foot c2">Người hoặc bộ phận nhận phải xử lý xong và bấm hoàn tất.</div>
+            </div>
           </div>
         )}
       </div>
@@ -287,8 +300,8 @@ export function TaskDetailScreen({ id }: { id: string }) {
                         <div className="t-foot">
                           <b>{a.name}</b> <span className="c2">· {friendly(a.at)}</span>
                         </div>
-                        <div className="t-sub" style={{ whiteSpace: 'pre-wrap', userSelect: 'text' }}>
-                          {a.note}
+                        <div className="t-sub" style={{ userSelect: 'text' }}>
+                          <MentionText text={a.note || ''} />
                         </div>
                       </div>
                     </div>
@@ -303,13 +316,13 @@ export function TaskDetailScreen({ id }: { id: string }) {
               ))}
           </div>
           <div className="row gap8 mt12">
-            <input
+            <MentionInput
               className="input"
-              style={{ height: 40, background: 'var(--fill-3)', borderRadius: 20, padding: '0 14px', fontSize: 16 }}
-              placeholder="Viết bình luận"
+              style={{ height: 40, background: 'var(--fill-3)', borderRadius: 20, padding: '0 14px', fontSize: 16, width: '100%' }}
+              placeholder="Viết bình luận, gõ @ để gắn tên"
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendComment()}
+              onChange={setComment}
+              onEnter={sendComment}
               enterKeyHint="send"
             />
             <button className="glass-btn icon prominent" style={{ width: 40, height: 40, minWidth: 40 }} onClick={sendComment} disabled={!comment.trim()} aria-label="Gửi">

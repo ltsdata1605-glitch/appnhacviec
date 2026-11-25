@@ -9,6 +9,7 @@ import { createTasks, saveTemplate, updateTaskFields } from '../../lib/actions';
 import { generateForToday } from '../../lib/recurring';
 import { api } from '../../lib/backend';
 import { PersonPicker, useActor } from '../shared';
+import { MentionInput } from '../../ui/Mention';
 import type { Priority, Recurrence, Task, TaskScope, TaskTemplate } from '../../lib/types';
 
 interface Props {
@@ -49,7 +50,8 @@ export function TaskEditor({ close, task, template, forceRepeat, presetAssignee 
   const [repeatDays, setRepeatDays] = useState<number[]>(template?.recurrence.days || [1, 2, 3, 4, 5, 6, 7]);
   const [busy, setBusy] = useState(false);
 
-  const canRepeat = !editing && s.isManager;
+  const canBroad = s.can('assign'); // giao cho bộ phận / hãng / toàn siêu thị, việc lặp lại
+  const canRepeat = !editing && canBroad;
   const valid =
     title.trim().length >= 2 &&
     (scope !== 'personal' || assignees.length > 0) &&
@@ -151,18 +153,20 @@ export function TaskEditor({ close, task, template, forceRepeat, presetAssignee 
           <Group>
             <input className="textarea" style={{ minHeight: 0, height: 54, fontWeight: 600 }} placeholder="Tiêu đề công việc" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={!editing} />
             <div className="hairline" style={{ marginLeft: 16 }} />
-            <textarea className="textarea" placeholder="Mô tả, hướng dẫn (tuỳ chọn)" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+            <MentionInput multiline rows={3} className="textarea" placeholder="Mô tả, hướng dẫn (tuỳ chọn). Gõ @ để gắn tên" value={note} onChange={setNote} below />
           </Group>
         </Section>
 
         {!editing && (
           <Section title="Giao cho" small footer={scope === 'personal' ? 'Mỗi người nhận một việc riêng. Chỉ quản lý và người được giao thấy việc cá nhân.' : 'Mọi nhân viên trong kho đều xem được. Thành viên được giao mới đánh dấu hoàn tất.'}>
-            <Segmented
-              value={scope}
-              onChange={setScope}
-              options={(['personal', 'department', 'brand', 'store'] as TaskScope[]).map((k) => ({ value: k, label: k === 'store' ? 'Toàn ST' : k === 'brand' ? 'Hãng' : SCOPE_LABEL[k] }))}
-              style={{ marginBottom: 10 }}
-            />
+            {canBroad && (
+              <Segmented
+                value={scope}
+                onChange={setScope}
+                options={(['personal', 'department', 'brand', 'store'] as TaskScope[]).map((k) => ({ value: k, label: k === 'store' ? 'Toàn ST' : k === 'brand' ? 'Hãng' : SCOPE_LABEL[k] }))}
+                style={{ marginBottom: 10 }}
+              />
+            )}
             <Group>
               {scope === 'personal' && <Cell icon="person" iconColor="blue" title="Nhân viên" detail={assigneeText} chevron onClick={pickPeople} />}
               {scope === 'department' && <Cell icon="people" iconColor="blue" title="Bộ phận" detail={department} chevron onClick={() => pickFrom(store.departments, department, setDepartment, 'Chọn bộ phận')} />}

@@ -1,7 +1,7 @@
 // Chụp báo cáo 8NTTT: chỉ dùng camera trong app, đóng dấu giờ máy chủ, kiểm tra vị trí.
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useSession } from '../../state/session';
+import { useSession, useStoreData } from '../../state/session';
 import { useUI } from '../../ui/Overlay';
 import { Icon } from '../../ui/Icon';
 import { Check, Group, Section, Cell, Img } from '../../ui/controls';
@@ -9,7 +9,9 @@ import { captureFrame, type Shot } from '../../lib/image';
 import { distanceMeters, formatDistance, geoErrorText, getPosition, type Position } from '../../lib/geo';
 import { now, stamp, vnDate } from '../../lib/time';
 import { api } from '../../lib/backend';
-import { submitReport } from '../../lib/actions';
+import { notifyMentions, submitReport } from '../../lib/actions';
+import { extractMentions } from '../../lib/mentions';
+import { MentionInput } from '../../ui/Mention';
 import { MAX_PHOTOS } from '../../lib/constants';
 import { useActor } from '../shared';
 import type { Area, Photo, Report } from '../../lib/types';
@@ -311,6 +313,7 @@ function Compose({
   onDone: () => void;
 }) {
   const s = useSession();
+  const d = useStoreData();
   const ui = useUI();
   const actor = useActor();
   const store = s.store!;
@@ -358,6 +361,8 @@ function Compose({
         geo: geo.status === 'ok' ? { lat: geo.pos.lat, lng: geo.pos.lng, accuracy: geo.pos.accuracy, distance: geo.distance } : null,
         existing,
       });
+      const tagged = extractMentions(note, d.active).filter((u) => u !== actor.uid);
+      if (tagged.length) await notifyMentions(tagged, store.code, actor, `báo cáo 8NTTT ${area.name}`, note.trim(), 'reports');
       ui.toast({ text: 'Đã gửi báo cáo', icon: 'check', color: 'green' });
       onDone();
     } catch (e) {
@@ -460,7 +465,7 @@ function Compose({
 
         <Section title="Ghi chú" small>
           <Group>
-            <textarea className="textarea" placeholder="Tồn tại cần báo quản lý (nếu có)" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+            <MentionInput multiline rows={3} className="textarea" placeholder="Tồn tại cần báo quản lý (nếu có). Gõ @ để gắn tên" value={note} onChange={setNote} />
           </Group>
         </Section>
       </div>

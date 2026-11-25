@@ -407,6 +407,67 @@ async function unseenRealerts(now: number) {
   }
 }
 
+// ---------------- Điểm danh ----------------
+interface RollcallDoc {
+  storeCode: string;
+  title: string;
+  items: { id: string; text: string }[];
+  audience: { type: string; value?: string | null; uids?: string[] };
+  dueAt: number | null;
+  remindBefore: number | null;
+  progress?: Record<string, { doneAt?: number | null }>;
+  createdBy: string;
+  closed?: boolean;
+  reminded?: { before?: boolean; due?: boolean };
+}
+
+function inAudience(a: RollcallDoc['audience'], u: User): boolean {
+  switch (a.type) {
+    case 'all':
+      return true;
+    case 'department':
+      return u.department === a.value;
+    case 'brand':
+      return u.role === 'pg' && u.brand === a.value;
+    case 'role':
+      return u.role === a.value;
+    case 'people':
+      return (a.uids || []).includes(u.uid);
+    default:
+      return false;
+  }
+}
+
+async function rollcallReminders(now: number) {
+  const snap = await db.collection('rollcalls').where('dueAt', '>=', now - 2 * 3600000).where('dueAt', '<=', now + 26 * 3600000).get();
+  for (const doc of snap.docs) {
+    const r = doc.data() as RollcallDoc;
+    if (r.closed || !r.dueAt) continue;
+    const rm = r.reminded || {};
+    const list = await members(r.storeCode);
+    const pending = list.filter((u) => inAudience(r.audience, u) && !r.progress?.[u.uid]?.doneAt);
+    const time = new Date(r.dueAt + VN).toISOString().slice(11, 16);
+    const patch: Record<string, boolean> = {};
+    if (r.remindBefore && !rm.before && now >= r.dueAt - r.remindBefore * 60000 && now < r.dueAt) {
+      await createNotes(pending.map((u) => u.uid), r.storeCode, { title: 'Sắp hết hạn điểm danh', body: `${r.title} · hạn ${time}`, link: `rollcall:${doc.id}`, level: 'high' });
+      patch['reminded.before'] = true;
+    }
+    if (!rm.due && now >= r.dueAt) {
+      await createNotes(pending.map((u) => u.uid), r.storeCode, { title: 'Đã hết hạn điểm danh', body: `${r.title} — bạn chưa hoàn tất`, link: `rollcall:${doc.id}`, level: 'urgent' });
+      const managers = [...new Set([r.createdBy, ...list.filter((u) => u.role === 'manager').map((u) => u.uid)])];
+      if (pending.length)
+        await createNotes(managers, r.storeCode, {
+          title: `${pending.length} người chưa điểm danh`,
+          body: `${r.title}: ${pending.slice(0, 6).map((u) => u.fullName).join(', ')}${pending.length > 6 ? '…' : ''}`,
+          link: `rollcall:${doc.id}`,
+          level: 'high',
+        });
+      patch['reminded.due'] = true;
+    }
+    if (Object.keys(patch).length) await doc.ref.update(patch);
+  }
+}
+
 async function storeRoutines(now: number) {
   const stores = await db.collection('stores').get();
   const today = vnDate(now);
@@ -468,6 +529,7 @@ export const every5Minutes = onSchedule({ schedule: 'every 5 minutes', timeZone:
   await Promise.all([
     taskReminders(now).catch((e) => logger.error('taskReminders', e)),
     unseenRealerts(now).catch((e) => logger.error('unseenRealerts', e)),
+    rollcallReminders(now).catch((e) => logger.error('rollcallReminders', e)),
     storeRoutines(now).catch((e) => logger.error('storeRoutines', e)),
   ]);
 });

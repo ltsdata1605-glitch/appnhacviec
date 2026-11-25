@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, type Where } from '../lib/backend';
 import { addDays, now, syncServerTime, vnDate } from '../lib/time';
-import type { AppNotification, Area, AuthUser, Leave, Permissions, Post, Report, Store, Task, UserProfile } from '../lib/types';
+import type { AppNotification, Area, AuthUser, Leave, Permissions, Post, Report, Rollcall, Store, Task, UserProfile } from '../lib/types';
 
 export interface Session {
   ready: boolean;
@@ -168,6 +168,7 @@ export interface StoreData {
   tasks: Task[];
   reports: Report[]; // ~35 ngày gần nhất
   posts: Post[];
+  rollcalls: Rollcall[];
   notifications: AppNotification[];
   loading: boolean;
   byUid: (uid?: string | null) => UserProfile | undefined;
@@ -188,7 +189,6 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
   const uid = s.auth?.uid;
   const reviewer = s.can('review');
   const approver = s.can('approve');
-  const assigner = s.can('assign');
   const since = useMemo(() => now() - 45 * 86400000, []);
   const sinceDate = useMemo(() => addDays(vnDate(), -40), []);
   const notifSince = useMemo(() => now() - 14 * 86400000, []);
@@ -200,10 +200,11 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
   const allTasks = useWatch<Task>('tasks', code && s.isManager ? [['storeCode', '==', code], ['createdAt', '>=', since]] : null);
   const sharedTasks = useWatch<Task>('tasks', code && !s.isManager ? [['storeCode', '==', code], ['shared', '==', true], ['createdAt', '>=', since]] : null);
   const myTasks = useWatch<Task>('tasks', code && uid && !s.isManager ? [['storeCode', '==', code], ['assigneeUid', '==', uid], ['createdAt', '>=', since]] : null);
-  const createdTasks = useWatch<Task>('tasks', code && uid && !s.isManager && assigner ? [['storeCode', '==', code], ['createdBy', '==', uid], ['createdAt', '>=', since]] : null);
+  const createdTasks = useWatch<Task>('tasks', code && uid && !s.isManager ? [['storeCode', '==', code], ['createdBy', '==', uid], ['createdAt', '>=', since]] : null);
   const allReports = useWatch<Report>('reports', code && reviewer ? [['storeCode', '==', code], ['date', '>=', sinceDate]] : null);
   const myReports = useWatch<Report>('reports', code && uid && !reviewer ? [['storeCode', '==', code], ['uid', '==', uid], ['date', '>=', sinceDate]] : null);
   const posts = useWatch<Post>('posts', code ? [['storeCode', '==', code]] : null);
+  const rollcalls = useWatch<Rollcall>('rollcalls', code ? [['storeCode', '==', code], ['createdAt', '>=', since - 15 * 86400000]] : null);
   const notifications = useWatch<AppNotification>('notifications', uid ? [['uid', '==', uid], ['createdAt', '>=', notifSince]] : null, [uid]);
 
   const value = useMemo<StoreData>(() => {
@@ -221,12 +222,13 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       tasks,
       reports: reviewer ? allReports.data : myReports.data,
       posts: posts.data,
+      rollcalls: rollcalls.data,
       notifications: notifications.data.sort((a, b) => b.createdAt - a.createdAt),
       loading: members.loading || areas.loading,
       byUid: (id) => (id ? map.get(id) : undefined),
       nameOf: (id) => (id ? map.get(id)?.fullName || 'Không rõ' : ''),
     };
-  }, [members, transfers, areas, leaves, allTasks, sharedTasks, myTasks, createdTasks, allReports, myReports, posts, notifications, s.isManager, reviewer, code]);
+  }, [members, transfers, areas, leaves, allTasks, sharedTasks, myTasks, createdTasks, allReports, myReports, posts, rollcalls, notifications, s.isManager, reviewer, code]);
 
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 }
