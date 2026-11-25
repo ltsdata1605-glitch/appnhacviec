@@ -78,7 +78,7 @@ Muốn thêm Admin khác: sau khi app chạy, vào **Nhân sự › Quản trị
 2. Claude gửi cho anh/chị một **đường link đăng nhập Firebase** kèm **mã phiên (Session ID)**.
 3. Mở link, kiểm tra mã phiên trên trang khớp với mã Claude gửi, rồi đăng nhập bằng Gmail Admin.
 4. Sao chép **mã xác nhận** hiện ra và gửi lại cho Claude.
-5. Claude sẽ đưa quy tắc bảo mật, chỉ mục, máy chủ nhắc việc và app lên mạng tại `https://<project-id>.web.app`.
+5. Claude sẽ đưa quy tắc bảo mật, chỉ mục, máy chủ nhắc việc và app lên mạng tại `https://<project-id>.firebaseapp.com`.
 
 ### Cách B — Tự triển khai bằng Google Cloud Shell (không cần cài gì vào máy)
 
@@ -93,7 +93,7 @@ git clone https://github.com/<tai-khoan-github>/nhac-viec.git && cd nhac-viec
 cp .env.example .env && nano .env
 ```
 
-Điền 7 dòng cấu hình. Dòng `VITE_FIREBASE_AUTH_DOMAIN` đặt bằng `<project-id>.web.app`. Bấm `Ctrl+O`, `Enter`, `Ctrl+X` để lưu.
+Điền 7 dòng cấu hình (có sẵn trong `.env.production` nếu đã cấu hình). Bấm `Ctrl+O`, `Enter`, `Ctrl+X` để lưu.
 
 ```bash
 npm install && npm --prefix functions install && npm run build
@@ -113,21 +113,15 @@ npx firebase-tools deploy
 
 Lần đầu triển khai Cloud Functions mất khoảng 3–5 phút. Nếu báo lỗi quyền API, chờ 1–2 phút rồi chạy lại lệnh `deploy`.
 
-## Bước 10. Cho phép đăng nhập Google ổn định trên iPhone
+## Bước 10. Địa chỉ app
 
-App đặt trang đăng nhập cùng tên miền với app (`<project-id>.web.app`) để iPhone không chặn. Cần khai báo thêm một địa chỉ:
-
-1. Mở <https://console.cloud.google.com/apis/credentials>, chọn đúng dự án ở thanh trên cùng.
-2. Mục **OAuth 2.0 Client IDs**, bấm **Web client (auto created by Google Service)**.
-3. **Authorized redirect URIs › + Add URI**, nhập:
-   `https://<project-id>.web.app/__/auth/handler`
-4. **Save**. Có thể mất vài phút để có hiệu lực.
+App dùng địa chỉ **`https://<project-id>.firebaseapp.com`**, trùng tên miền với trang đăng nhập Google, nên iPhone không chặn đăng nhập và không cần cấu hình thêm. Nếu ai mở bằng `https://<project-id>.web.app`, app tự chuyển sang địa chỉ trên.
 
 ## Bước 11. Bắt đầu dùng
 
 **Admin / Quản lý (làm trên iPhone):**
 
-1. Mở `https://<project-id>.web.app` bằng **Safari**.
+1. Mở `https://<project-id>.firebaseapp.com` bằng **Safari**.
 2. Chạm **Chia sẻ › Thêm vào MH chính › Thêm**.
 3. Mở app từ Màn hình chính, chạm **Tiếp tục với Google**.
 4. Chọn **Quản lý**, nhập User, Họ tên, Mã kho. Tài khoản Admin được duyệt ngay.
