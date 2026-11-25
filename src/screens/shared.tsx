@@ -4,6 +4,7 @@ import { useSession, useStoreData } from '../state/session';
 import { useUI, SheetHead } from '../ui/Overlay';
 import { Avatar, Check, Empty, Group, Pill, SearchBar, Section, Switch, Cell } from '../ui/controls';
 import { Icon } from '../ui/Icon';
+import { AppIcon } from '../ui/AppIcon';
 import { matches } from '../lib/text';
 import { ROLE_LABEL, APP_NAME } from '../lib/constants';
 import { TASK_STATE_META, taskState, targetLabel, myDone, isActor } from '../lib/tasks';
@@ -276,9 +277,9 @@ export function InstallGuide({ close }: { close: () => void }) {
       <SheetHead title="Cài app lên iPhone" onCancel={close} />
       <div className="sheet-body">
         <div className="center" style={{ padding: '8px 24px 4px' }}>
-          <span className="app-icon" style={{ width: 76, height: 76, margin: '0 auto' }}>
-            <Icon name="bell" size={44} stroke={2} />
-          </span>
+          <div style={{ display: 'inline-block' }}>
+            <AppIcon size={76} />
+          </div>
           <div className="t-title2 mt16">{APP_NAME}</div>
           <div className="t-sub c2 mt8">Thêm vào Màn hình chính để mở như app thật, nhận thông báo nhắc việc và số đỏ trên biểu tượng.</div>
         </div>

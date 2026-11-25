@@ -4,6 +4,7 @@ import { SessionProvider, StoreDataProvider, useSession, useStoreData } from './
 import { UIProvider } from './ui/Overlay';
 import { Stack, type StackHandle } from './ui/Nav';
 import { Icon, type IconName } from './ui/Icon';
+import { AppIcon } from './ui/AppIcon';
 import { LoginScreen } from './screens/auth/Login';
 import { OnboardingScreen, StatusScreen } from './screens/auth/Onboarding';
 import { TodayScreen } from './screens/home/Today';
@@ -52,9 +53,7 @@ export function App() {
 function Splash() {
   return (
     <div className="splash">
-      <span className="app-icon" style={{ width: 88, height: 88 }}>
-        <Icon name="bell" size={50} stroke={2} />
-      </span>
+      <AppIcon size={88} />
     </div>
   );
 }

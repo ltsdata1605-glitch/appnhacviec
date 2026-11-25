@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../../lib/backend';
 import { useUI } from '../../ui/Overlay';
 import { Icon } from '../../ui/Icon';
+import { AppIcon } from '../../ui/AppIcon';
 import { Group, Section, Cell } from '../../ui/controls';
 import { APP_NAME } from '../../lib/constants';
 import { InstallGuide, isIOS, isStandalone } from '../shared';
@@ -39,9 +40,9 @@ export function LoginScreen() {
       <div className="app-frame" style={{ overflowY: 'auto', height: '100%' }}>
         <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', padding: 'calc(var(--safe-top) + 40px) 0 calc(var(--safe-bottom) + 24px)' }}>
           <div className="center" style={{ padding: '24px 32px 0', flex: demo ? 'none' : 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <span className="app-icon" style={{ width: 96, height: 96, margin: '0 auto' }}>
-              <Icon name="bell" size={56} stroke={1.9} />
-            </span>
+            <div style={{ margin: '0 auto' }}>
+              <AppIcon size={96} />
+            </div>
             <div className="t-large" style={{ marginTop: 24 }}>
               {APP_NAME}
             </div>
