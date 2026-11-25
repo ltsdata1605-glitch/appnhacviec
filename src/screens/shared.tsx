@@ -8,9 +8,9 @@ import { AppIcon } from '../ui/AppIcon';
 import { matches } from '../lib/text';
 import { ROLE_LABEL, APP_NAME } from '../lib/constants';
 import { TASK_STATE_META, taskState, targetLabel, myDone, isActor } from '../lib/tasks';
-import { dueLabel, relative } from '../lib/time';
+import { dueLabel } from '../lib/time';
 import { api } from '../lib/backend';
-import { actorOf, markNotificationsRead, completeTask, reopenTask } from '../lib/actions';
+import { actorOf, completeTask, reopenTask } from '../lib/actions';
 import type { Task, UserProfile } from '../lib/types';
 
 export const LinkCtx = createContext<(link: string) => void>(() => {});
@@ -42,7 +42,14 @@ export function NavActions() {
   const unread = d.notifications.filter((n) => !n.read).length;
   return (
     <>
-      <button className="glass-btn icon" aria-label="Thông báo" onClick={() => ui.sheet((close) => <NotificationsSheet close={close} />)}>
+      <button
+        className="glass-btn icon"
+        aria-label="Thông báo"
+        onClick={async () => {
+          const { NotificationsSheet } = await import('./notify/Notifications');
+          ui.sheet((close) => <NotificationsSheet close={close} />);
+        }}
+      >
         <Icon name="bell" size={21} />
         {unread > 0 && <span className="badge-dot" />}
       </button>
@@ -56,49 +63,6 @@ export function NavActions() {
       >
         <Avatar name={s.profile?.fullName || s.auth?.displayName || '?'} src={s.profile?.photoURL || s.auth?.photoURL} size={44} />
       </button>
-    </>
-  );
-}
-
-function NotificationsSheet({ close }: { close: () => void }) {
-  const d = useStoreData();
-  const open = useOpenLink();
-  const list = d.notifications;
-  const unreadIds = list.filter((n) => !n.read).map((n) => n.id);
-  return (
-    <>
-      <SheetHead title="Thông báo" onCancel={close} onDone={unreadIds.length ? () => markNotificationsRead(unreadIds) : undefined} doneLabel={unreadIds.length ? 'Đọc hết' : undefined} />
-      <div className="sheet-body">
-        {list.length === 0 ? (
-          <Empty icon="bell" title="Chưa có thông báo" text="Việc mới, nhắc hạn và kết quả chấm báo cáo sẽ hiện ở đây." />
-        ) : (
-          <Section>
-            <Group>
-              {list.map((n) => (
-                <Cell
-                  key={n.id}
-                  leading={<span className={`dot ${n.read ? 'gray' : 'blue'}`} style={{ opacity: n.read ? 0 : 1 }} />}
-                  sepInset={36}
-                  title={<span className={n.read ? '' : 'semibold'}>{n.title}</span>}
-                  sub={
-                    <>
-                      <span className="clamp2">{n.body}</span>
-                      <span className="t-foot c3">{relative(n.createdAt)}</span>
-                    </>
-                  }
-                  onClick={() => {
-                    if (!n.read) markNotificationsRead([n.id]);
-                    if (n.link) {
-                      close();
-                      setTimeout(() => open(n.link!), 250);
-                    }
-                  }}
-                />
-              ))}
-            </Group>
-          </Section>
-        )}
-      </div>
     </>
   );
 }

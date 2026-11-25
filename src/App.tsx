@@ -20,6 +20,7 @@ import { isOpen, isActor } from './lib/tasks';
 import { todayBoard } from './lib/reports';
 import { vnDate } from './lib/time';
 import { LinkCtx } from './screens/shared';
+import { NotificationCenter } from './screens/notify/Notifications';
 
 type TabKey = 'home' | 'tasks' | 'reports' | 'library' | 'people';
 
@@ -180,6 +181,7 @@ function Main() {
 
   return (
     <LinkCtx.Provider value={openLink}>
+      <NotificationCenter />
       <div className="app">
         <div className="app-frame">
           {tabs.map((t) => (

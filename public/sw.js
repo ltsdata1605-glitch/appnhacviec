@@ -1,7 +1,7 @@
 /* Service worker — Nhắc việc
    - Lưu tạm vỏ ứng dụng để mở nhanh, dùng được khi mạng chập chờn
    - Nhận thông báo đẩy (Firebase Cloud Messaging / Web Push) và cập nhật số trên biểu tượng app */
-const CACHE = 'nhac-viec-v1';
+const CACHE = 'nhac-viec-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/icons/apple-touch-icon.png', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
@@ -64,6 +64,7 @@ function parsePush(event) {
     link: data.link || '',
     badge: data.badge ? Number(data.badge) : null,
     tag: data.tag || undefined,
+    level: data.level || 'normal',
   };
 }
 
@@ -75,7 +76,13 @@ self.addEventListener('push', (event) => {
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       tag: p.tag,
-      data: { link: p.link },
+      // Báo lại (có tiếng) khi cùng một việc được nhắc tiếp
+      renotify: !!p.tag,
+      // Việc quan trọng giữ trên màn hình đến khi người dùng chạm (trình duyệt hỗ trợ)
+      requireInteraction: p.level !== 'normal',
+      vibrate: p.level === 'urgent' ? [400, 150, 400, 150, 400, 150, 700] : p.level === 'high' ? [250, 120, 250] : [180],
+      timestamp: Date.now(),
+      data: { link: p.link, level: p.level },
     }),
   ];
   if (p.badge !== null && self.navigator && 'setAppBadge' in self.navigator) {

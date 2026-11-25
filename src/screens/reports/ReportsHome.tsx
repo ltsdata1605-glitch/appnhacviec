@@ -209,7 +209,7 @@ function TodayBoard() {
     if (!uids.length) return;
     const ok = await ui.confirm(`Nhắc ${uids.length} người chưa báo cáo?`, 'Mỗi người sẽ nhận thông báo nhắc chụp báo cáo 8NTTT.', 'Gửi nhắc');
     if (!ok) return;
-    await notify(uids, store.code, actor, { title: 'Nhắc báo cáo 8NTTT', body: `${actor.name} nhắc bạn chụp báo cáo khu vực trước ${store.deadline}.`, link: 'reports', urgent: true });
+    await notify(uids, store.code, actor, { title: 'Nhắc báo cáo 8NTTT', body: `${actor.name} nhắc bạn chụp báo cáo khu vực trước ${store.deadline}.`, link: 'reports', level: 'high' });
     ui.toast({ text: `Đã nhắc ${uids.length} người`, icon: 'bell', color: 'orange' });
   };
 
@@ -224,7 +224,7 @@ function TodayBoard() {
     }
     const v = await ui.actions([{ label: `Nhắc ${d.nameOf(x.responsible)}`, value: 'nudge', icon: 'bell' }], `${x.area.name} · ${STATUS_META[x.status].label}`);
     if (v === 'nudge') {
-      await notify([x.responsible], store.code, actor, { title: 'Nhắc báo cáo 8NTTT', body: `Khu vực ${x.area.name} chưa có báo cáo hôm nay. Hạn ${store.deadline}.`, link: 'reports', urgent: true });
+      await notify([x.responsible], store.code, actor, { title: 'Nhắc báo cáo 8NTTT', body: `Khu vực ${x.area.name} chưa có báo cáo hôm nay. Hạn ${store.deadline}.`, link: 'reports', level: 'high' });
       ui.toast({ text: 'Đã gửi nhắc', icon: 'bell', color: 'orange' });
     }
   };

@@ -58,7 +58,10 @@ async function main() {
       timezoneId: 'Asia/Ho_Chi_Minh',
       locale: 'vi-VN',
     });
-    await ctx.addInitScript(() => localStorage.setItem('nv-install-dismissed', '1'));
+    await ctx.addInitScript(() => {
+      localStorage.setItem('nv-install-dismissed', '1');
+      window.__nvSoundLog = [];
+    });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => problems.push(`[${key}] lỗi trang: ${e.message}`));
     page.on('console', (m) => {
@@ -79,7 +82,9 @@ async function main() {
   // Chỉ thao tác trên màn hình đang hiện (màn hình bên dưới vẫn hiển thị một phần khi trượt)
   const notUnder = (sel) => sel.split(',').map((x) => `${x.trim()}:not(.screen[aria-hidden="true"] *)`).join(', ');
   const vis = (page, sel, text) => page.locator(notUnder(sel), text ? { hasText: text } : undefined).filter({ visible: true });
+  const noBanner = (page) => page.locator('.nbanner').first().waitFor({ state: 'detached', timeout: 12000 }).catch(() => {});
   const tap = async (page, sel, text) => {
+    await noBanner(page);
     await vis(page, sel, text).first().click();
     await page.waitForTimeout(450);
   };
@@ -97,10 +102,12 @@ async function main() {
     return (await page.getByText(text, { exact: false }).filter({ visible: true }).count()) === 0;
   };
   const tab = async (page, label) => {
+    await noBanner(page);
     await page.locator('nav.tabbar button', { hasText: label }).click();
     await page.waitForTimeout(600);
   };
   const back = async (page) => {
+    await noBanner(page);
     await vis(page, '.glass-btn[aria-label="Quay lại"]').last().click();
     await page.waitForTimeout(600);
   };
@@ -137,7 +144,7 @@ async function main() {
     if (chainLabel) await page.locator('.cell', { hasText: chainLabel }).first().click();
   }
 
-  async function newTask(page, { title, scope, people = [], pick, each, approval }) {
+  async function newTask(page, { title, scope, people = [], pick, each, approval, priority }) {
     await tap(page, '.glass-btn[aria-label="Giao việc mới"]');
     const s = sheet(page);
     await s.locator('input[placeholder="Tiêu đề công việc"]').fill(title);
@@ -155,6 +162,7 @@ async function main() {
     }
     if (each) await sheet(page).locator('.cell', { hasText: 'Từng người phải xác nhận' }).locator('input').check();
     if (approval) await sheet(page).locator('.cell', { hasText: 'Cần quản lý duyệt' }).locator('input').check();
+    if (priority) await sheet(page).locator('.segmented button', { hasText: priority }).last().click();
     await sheetDone(page, 'Giao');
   }
 
@@ -310,7 +318,7 @@ async function main() {
   // Thông báo
   await tab(C, 'Hôm nay');
   await tap(C, '.glass-btn[aria-label="Thông báo"]');
-  check('Hoa nhận thông báo "Việc mới" trong app', await has(C, 'Việc mới từ Lê Trường Sơn'));
+  check('Hoa nhận thông báo "Việc mới" trong app', await has(C, 'Việc mới · Kiểm kê kho cuối ngày'));
   await sheet(C).locator('.glass-btn[aria-label="Đóng"]').click();
   await C.waitForTimeout(600);
 
@@ -509,6 +517,50 @@ async function main() {
   await shot(A, 'admin-view-911');
   await tap(A, '.btn', 'Thoát');
   check('Admin quay về kho của mình', await has(A, 'Siêu thị 910'));
+
+  // =====================================================================
+  sec('8. Âm thanh và cảnh báo theo mức độ');
+  await tab(C, 'Hôm nay');
+  await C.evaluate(() => (window.__nvSoundLog = []));
+  await tab(A, 'Công việc');
+  await newTask(A, { title: 'Dọn lối đi kho', people: ['Nguyễn Thị Hoa'] });
+  check('Việc Thường: biểu ngữ trong app', await C.locator('.nbanner', { hasText: 'Dọn lối đi kho' }).waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+  check('Việc Thường: phát âm "Thường"', (await C.evaluate(() => window.__nvSoundLog)).includes('normal'));
+  await C.locator('.nbanner').first().waitFor({ state: 'detached', timeout: 12000 }).catch(() => {});
+  await newTask(A, { title: 'Kiểm tra tem giá Tivi', people: ['Nguyễn Thị Hoa'], priority: 'Cao' });
+  check('Ưu tiên cao: biểu ngữ có nhãn "Ưu tiên cao"', await C.locator('.nbanner .nb-level.high').waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+  await shot(C, 'banner-high');
+  check('Ưu tiên cao: phát âm "Ưu tiên cao"', (await C.evaluate(() => window.__nvSoundLog)).includes('high'));
+  await C.locator('.nbanner').first().waitFor({ state: 'detached', timeout: 14000 }).catch(() => {});
+  await newTask(A, { title: 'Khách khiếu nại tại quầy', people: ['Nguyễn Thị Hoa'], priority: 'Khẩn' });
+  const ua = C.locator('.ualert');
+  check('Việc Khẩn: hiện cảnh báo toàn màn hình', await ua.waitFor({ timeout: 8000 }).then(() => true).catch(() => false));
+  check('Việc Khẩn: cảnh báo có tiêu đề việc', await has(C, 'Khách khiếu nại tại quầy'));
+  await C.waitForTimeout(3200);
+  const urgentPlays = (await C.evaluate(() => window.__nvSoundLog)).filter((x) => x === 'urgent').length;
+  check('Việc Khẩn: chuông lặp đến khi xác nhận', urgentPlays >= 2, `${urgentPlays} lần`);
+  await shot(C, 'urgent-alert');
+  await C.locator('.ualert .btn', { hasText: 'Đã nhận' }).click();
+  await C.waitForTimeout(1500);
+  check('Bấm "Đã nhận" tắt cảnh báo', (await ua.count()) === 0);
+  const before = (await C.evaluate(() => window.__nvSoundLog)).length;
+  await C.waitForTimeout(3000);
+  check('Chuông dừng sau khi xác nhận', (await C.evaluate(() => window.__nvSoundLog)).length === before);
+  const urgentTask = (await fsQuery('tasks', 'title', 'Khách khiếu nại tại quầy'))[0];
+  const hoaUid = (await fsQuery('users', 'email', 'hoa@test.vn'))[0].name.split('/').pop();
+  check('"Đã nhận" ghi nhận Hoa đã xem việc (dừng nhắc lại)', !!urgentTask?.fields?.seenBy?.mapValue?.fields?.[hoaUid]);
+  const hoaNotes = await fsQuery('notifications', 'uid', hoaUid);
+  check('Thông báo lưu mức độ "urgent"', hoaNotes.some((n) => n.fields.level?.stringValue === 'urgent' && /Việc mới/.test(n.fields.title.stringValue)));
+  await tap(C, '.glass-btn[aria-label="Thông báo"]');
+  check('Danh sách thông báo hiện nhãn mức độ', (await has(C, 'Khẩn')) && (await has(C, 'Ưu tiên cao')));
+  await sheet(C).locator('.chip', { hasText: 'Quan trọng' }).click();
+  await C.waitForTimeout(500);
+  check('Lọc thông báo quan trọng', !(await sheet(C).locator('.cell', { hasText: 'Dọn lối đi kho' }).count()));
+  await shot(C, 'notifications');
+  await sheet(C).locator('.cell', { hasText: 'Cài đặt thông báo' }).click();
+  await C.waitForTimeout(700);
+  check('Trang Cài đặt thông báo & âm thanh', (await has(C, 'Gửi thử')) && (await has(C, 'Đổi âm báo mặc định')));
+  await shot(C, 'notify-settings');
 
   await browser.close();
 

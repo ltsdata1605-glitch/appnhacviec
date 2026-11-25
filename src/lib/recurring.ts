@@ -67,7 +67,7 @@ export async function generateForToday(templates: TaskTemplate[], members: UserP
       await api().set('tasks', id, task as unknown as Record<string, unknown>);
       created++;
       const recipients = uid ? [uid] : members.filter((x) => x.status === 'active' && isActor({ ...task, id } as Task, x)).map((x) => x.uid);
-      await notify(recipients, tpl.storeCode, { uid: by.uid, name: 'Việc lặp lại' }, { title: 'Việc hôm nay', body: `${tpl.title} · hạn ${tpl.recurrence.time}`, link: `task:${id}` });
+      await notify(recipients, tpl.storeCode, { uid: by.uid, name: 'Việc lặp lại' }, { title: 'Việc hôm nay', body: `${tpl.title} · hạn ${tpl.recurrence.time}`, link: `task:${id}`, level: tpl.priority });
     }
     await api().update('taskTemplates', tpl.id, { lastGenerated: today });
   }

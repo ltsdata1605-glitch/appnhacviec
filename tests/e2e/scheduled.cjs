@@ -88,6 +88,10 @@ async function trigger(fn) {
   await put('tasks/due', { ...base, title: 'Việc vừa đến hạn', dueAt: now - 10 * 60000, remindBefore: null });
   await put('tasks/late', { ...base, title: 'Việc quá hạn lâu', dueAt: now - 45 * 60000, remindBefore: null });
   await put('tasks/later', { ...base, title: 'Việc còn xa', dueAt: now + 5 * 3600000, remindBefore: 30 });
+  await put('tasks/urg', { ...base, title: 'Khẩn chưa xem', priority: 'urgent', dueAt: null, createdAt: now - 6 * 60000 });
+  await put('tasks/urgSeen', { ...base, title: 'Khẩn đã xem', priority: 'urgent', dueAt: null, createdAt: now - 6 * 60000, seenBy: { s930: now - 60000 } });
+  await put('tasks/high', { ...base, title: 'Cao chưa xem', priority: 'high', dueAt: null, createdAt: now - 20 * 60000 });
+  await put('tasks/highNew', { ...base, title: 'Cao mới giao', priority: 'high', dueAt: null, createdAt: now - 2 * 60000 });
   await put('taskTemplates/tplA', {
     storeCode: '930', title: 'Kiểm quỹ đầu ca', scope: 'department', department: 'Kho', priority: 'normal', checklist: ['Đếm tiền'],
     requirePhoto: false, requireApproval: false, completionMode: 'any', remindBefore: 15, recurrence: { type: 'daily', time: '08:30' }, active: true, lastGenerated: null, createdBy: 'm930', createdAt: now,
@@ -110,12 +114,18 @@ async function trigger(fn) {
   const soon = await get('tasks/soon');
   check('Đánh dấu đã nhắc để không nhắc lặp', soon?.reminded?.before === true);
 
+  check('Nhắc lại việc Khẩn chưa xem', s.some((n) => n.title === 'Việc khẩn chưa xem' && n.body.includes('Khẩn chưa xem') && n.level === 'urgent'));
+  check('Không nhắc lại việc Khẩn đã xem', !s.some((n) => n.body.includes('Khẩn đã xem')));
+  check('Nhắc lại việc Ưu tiên cao chưa xem sau 15 phút', s.some((n) => n.title === 'Việc quan trọng chưa xem' && n.body.includes('Cao chưa xem') && n.level === 'high'));
+  check('Chưa nhắc lại việc Ưu tiên cao mới giao 2 phút', !s.some((n) => n.body.includes('Cao mới giao')));
+  check('Nhắc hạn mang đúng mức độ (Đã đến hạn → Ưu tiên cao)', s.some((n) => n.title === 'Đã đến hạn' && n.level === 'high'));
   const before = s.length;
   await trigger('every5Minutes');
   await sleep(300);
   const s2 = await notesOf('s930');
   const dupTask = s2.filter((n) => n.title === 'Sắp đến hạn').length;
   check('Chạy lần 2 không nhắc trùng việc', dupTask === 1, `số thông báo ${before} → ${s2.length}`);
+  check('Không nhắc lại việc Khẩn dồn dập (cách 5 phút)', s2.filter((n) => n.title === 'Việc khẩn chưa xem').length === 1);
 
   console.log('\n■ Hàm daily (0h05 hằng ngày)');
   await trigger('daily');

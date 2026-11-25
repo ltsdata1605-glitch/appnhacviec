@@ -140,7 +140,12 @@ function isActor(t: Task, u: User): boolean {
   return true;
 }
 
-async function createNotes(uids: string[], storeCode: string, msg: { title: string; body: string; link?: string; urgent?: boolean }) {
+type Level = 'normal' | 'high' | 'urgent';
+const levelOfPriority = (p?: string): Level => (p === 'urgent' ? 'urgent' : p === 'high' ? 'high' : 'normal');
+const LEVEL_PREFIX: Record<Level, string> = { normal: '', high: 'Ưu tiên cao · ', urgent: 'KHẨN · ' };
+
+async function createNotes(uids: string[], storeCode: string, msg: { title: string; body: string; link?: string; level?: Level }) {
+  const level: Level = msg.level || 'normal';
   const uniq = [...new Set(uids.filter(Boolean))];
   for (let i = 0; i < uniq.length; i += 400) {
     const batch = db.batch();
@@ -153,7 +158,8 @@ async function createNotes(uids: string[], storeCode: string, msg: { title: stri
         title: msg.title,
         body: msg.body,
         link: msg.link || null,
-        urgent: !!msg.urgent,
+        level,
+        urgent: level === 'urgent',
         read: false,
         createdAt: Date.now(),
       });
@@ -168,8 +174,10 @@ async function createNotes(uids: string[], storeCode: string, msg: { title: stri
 export const onNotificationCreated = onDocumentCreated('notifications/{id}', async (event) => {
   const n = event.data?.data();
   if (!n) return;
+  const level: Level = n.level || (n.urgent ? 'urgent' : 'normal');
   const store = n.storeCode ? await getStore(n.storeCode) : null;
-  if (store && !n.urgent && isQuiet(vnMinutes(), store.quietStart || '22:00', store.quietEnd || '06:00')) return; // giờ yên lặng
+  // Giờ yên lặng: chỉ việc Khẩn và thông báo thử mới đổ chuông
+  if (store && level !== 'urgent' && !n.test && isQuiet(vnMinutes(), store.quietStart || '22:00', store.quietEnd || '06:00')) return;
   const tokSnap = await db.doc(`pushTokens/${n.uid}`).get();
   const tokens: string[] = tokSnap.exists ? tokSnap.get('tokens') || [] : [];
   if (!tokens.length) return;
@@ -177,13 +185,14 @@ export const onNotificationCreated = onDocumentCreated('notifications/{id}', asy
   const res = await getMessaging().sendEachForMulticast({
     tokens,
     data: {
-      title: String(n.title || 'Nhắc việc'),
+      title: LEVEL_PREFIX[level] + String(n.title || 'Nhắc việc'),
       body: String(n.body || ''),
       link: String(n.link || ''),
       badge: String(Math.min(unread.data().count, 99)),
       tag: n.link ? String(n.link) : event.params.id,
+      level,
     },
-    webpush: { headers: { Urgency: n.urgent ? 'high' : 'normal', TTL: '86400' } },
+    webpush: { headers: { Urgency: level === 'normal' ? 'normal' : 'high', TTL: '86400' } },
   });
   const bad = res.responses
     .map((r, i) => (!r.success && /registration-token-not-registered|invalid-registration-token|invalid-argument/.test(r.error?.code || '') ? tokens[i] : null))
@@ -343,21 +352,58 @@ async function taskReminders(now: number) {
     const time = new Date(t.dueAt + VN).toISOString().slice(11, 16);
     const patch: Record<string, boolean> = {};
     if (t.remindBefore && !r.before && now >= t.dueAt - t.remindBefore * 60000 && now < t.dueAt) {
-      await createNotes(actors, t.storeCode, { title: 'Sắp đến hạn', body: `${t.title} · hạn ${time}`, link: `task:${t.id}`, urgent: t.priority === 'urgent' });
+      await createNotes(actors, t.storeCode, { title: 'Sắp đến hạn', body: `${t.title} · hạn ${time}`, link: `task:${t.id}`, level: levelOfPriority(t.priority) });
       patch['reminded.before'] = true;
     }
     if (!r.due && now >= t.dueAt && now < t.dueAt + 60 * 60000) {
-      await createNotes(actors, t.storeCode, { title: 'Đã đến hạn', body: `${t.title} chưa hoàn tất`, link: `task:${t.id}`, urgent: t.priority !== 'normal' });
+      await createNotes(actors, t.storeCode, { title: 'Đã đến hạn', body: `${t.title} chưa hoàn tất`, link: `task:${t.id}`, level: t.priority === 'urgent' ? 'urgent' : 'high' });
       patch['reminded.due'] = true;
     }
     const esc = (store?.escalateMinutes || 30) * 60000;
     if (!r.escalated && now >= t.dueAt + esc) {
       const managers = list.filter((u) => u.role === 'manager').map((u) => u.uid);
       const who = t.scope === 'personal' ? list.find((u) => u.uid === t.assigneeUid)?.fullName || '' : `${actors.length} người`;
-      await createNotes(managers, t.storeCode, { title: 'Việc quá hạn', body: `${t.title} · ${who} · quá hạn ${Math.round((now - t.dueAt) / 60000)} phút`, link: `task:${t.id}` });
+      await createNotes(managers, t.storeCode, { title: 'Việc quá hạn', body: `${t.title} · ${who} · quá hạn ${Math.round((now - t.dueAt) / 60000)} phút`, link: `task:${t.id}`, level: 'high' });
       patch['reminded.escalated'] = true;
     }
     if (Object.keys(patch).length) await doc.ref.update(patch);
+  }
+}
+
+/**
+ * Nhắc lại việc Khẩn / Ưu tiên cao mà người nhận CHƯA MỞ XEM:
+ * - Khẩn: nhắc lại mỗi 5 phút, tối đa 3 lần
+ * - Ưu tiên cao: nhắc lại 1 lần sau 15 phút
+ * iPhone không cho đổi âm báo của thông báo đẩy, nên nhắc lại là cách để không bị bỏ lỡ.
+ */
+async function unseenRealerts(now: number) {
+  const snap = await db
+    .collection('tasks')
+    .where('priority', 'in', ['urgent', 'high'])
+    .where('createdAt', '>=', now - 3 * 3600000)
+    .get();
+  const memberCache = new Map<string, User[]>();
+  for (const doc of snap.docs) {
+    const t = { ...(doc.data() as Task & { createdAt: number; seenBy?: Record<string, number> }), id: doc.id };
+    if (t.status !== 'open' && t.status !== 'returned') continue;
+    const r = (t.reminded || {}) as { repeat?: number; lastRepeat?: number };
+    const count = r.repeat || 0;
+    const max = t.priority === 'urgent' ? 3 : 1;
+    const gap = (t.priority === 'urgent' ? 5 : 15) * 60000 - 30000;
+    if (count >= max || now - (r.lastRepeat || t.createdAt) < gap) continue;
+    if (!memberCache.has(t.storeCode)) memberCache.set(t.storeCode, await members(t.storeCode));
+    const unseen = memberCache
+      .get(t.storeCode)!
+      .filter((u) => isActor(t, u) && !t.seenBy?.[u.uid] && !t.completions?.[u.uid] && u.uid !== (t as unknown as { createdBy?: string }).createdBy)
+      .map((u) => u.uid);
+    if (!unseen.length) continue;
+    await createNotes(unseen, t.storeCode, {
+      title: t.priority === 'urgent' ? 'Việc khẩn chưa xem' : 'Việc quan trọng chưa xem',
+      body: `${t.title}${t.dueAt ? ` · hạn ${new Date(t.dueAt + VN).toISOString().slice(11, 16)}` : ''} · nhắc lần ${count + 1}`,
+      link: `task:${t.id}`,
+      level: levelOfPriority(t.priority),
+    });
+    await doc.ref.update({ 'reminded.repeat': count + 1, 'reminded.lastRepeat': now });
   }
 }
 
@@ -387,7 +433,7 @@ async function storeRoutines(now: number) {
 
     if (reminderHit && missing.length) {
       for (const m of missing) {
-        await createNotes([m.uid!], store.code, { title: 'Nhắc báo cáo 8NTTT', body: `Khu vực ${m.area.name} chưa có báo cáo hôm nay. Hạn ${store.deadline}.`, link: 'reports', urgent: true });
+        await createNotes([m.uid!], store.code, { title: 'Nhắc báo cáo 8NTTT', body: `Khu vực ${m.area.name} chưa có báo cáo hôm nay. Hạn ${store.deadline}.`, link: 'reports', level: 'high' });
       }
     }
     if (deadlineHit && missing.length) {
@@ -397,6 +443,7 @@ async function storeRoutines(now: number) {
         title: `${missing.length} khu vực quá giờ chưa báo cáo`,
         body: names.slice(0, 8).join(', ') + (names.length > 8 ? `… và ${names.length - 8} khu vực khác` : ''),
         link: 'reports',
+        level: 'high',
       });
     }
     if (digestHit) {
@@ -420,6 +467,7 @@ export const every5Minutes = onSchedule({ schedule: 'every 5 minutes', timeZone:
   const now = Date.now();
   await Promise.all([
     taskReminders(now).catch((e) => logger.error('taskReminders', e)),
+    unseenRealerts(now).catch((e) => logger.error('unseenRealerts', e)),
     storeRoutines(now).catch((e) => logger.error('storeRoutines', e)),
   ]);
 });
@@ -498,7 +546,7 @@ async function generateRecurring(today: string) {
       };
       await ref.set(task);
       const recipients = uid ? [uid] : list.filter((u) => isActor(task as unknown as Task, u)).map((u) => u.uid);
-      await createNotes(recipients, tpl.storeCode, { title: 'Việc hôm nay', body: `${tpl.title} · hạn ${tpl.recurrence.time}`, link: `task:${id}` });
+      await createNotes(recipients, tpl.storeCode, { title: 'Việc hôm nay', body: `${tpl.title} · hạn ${tpl.recurrence.time}`, link: `task:${id}`, level: levelOfPriority(tpl.priority) });
     }
     await doc.ref.update({ lastGenerated: today });
   }

@@ -2150,3 +2150,180 @@ button.cell:active,
 .cell.destructive.center-text .cell-title {
   color: var(--red);
 }
+
+/* ---------- Biểu ngữ thông báo trong app (kiểu iOS) ---------- */
+.nbanner-wrap {
+  position: fixed;
+  z-index: 280;
+  top: calc(var(--safe-top) + 6px);
+  left: 0;
+  right: 0;
+  padding: 0 calc(8px + var(--safe-right)) 0 calc(8px + var(--safe-left));
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.nbanner {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px 13px;
+  border-radius: 26px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: var(--shadow-float), inset 0 0 0 0.5px var(--glass-border);
+  animation: toastIn 0.5s var(--spring) both;
+  cursor: pointer;
+  transition: transform 0.25s var(--ease-out);
+}
+.nbanner.out {
+  animation: toastOut 0.28s ease both;
+}
+.nbanner.high {
+  box-shadow: var(--shadow-float), inset 0 0 0 1.5px var(--orange);
+}
+.nbanner .app-icon {
+  border-radius: 9px;
+  box-shadow: none;
+  flex: none;
+}
+.nb-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--label-2);
+  letter-spacing: 0.2px;
+}
+.nb-app {
+  font-weight: 600;
+  flex: 1;
+}
+.nb-level {
+  font-weight: 700;
+  padding: 0 7px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+}
+.nb-level.high {
+  background: var(--orange);
+}
+.nb-level.urgent {
+  background: var(--red);
+}
+.nb-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.24px;
+  margin-top: 2px;
+}
+.nb-body {
+  font-size: 15px;
+  line-height: 20px;
+  letter-spacing: -0.24px;
+  color: var(--label);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---------- Cảnh báo việc khẩn ---------- */
+.ualert-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 290;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.2s ease both;
+}
+.ualert {
+  width: min(360px, 100%);
+  border-radius: 34px;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  animation: alertIn 0.45s var(--spring) both;
+}
+.ualert-head {
+  background: var(--red);
+  color: #fff;
+  text-align: center;
+  padding: 24px 20px 18px;
+}
+.ualert-ring {
+  width: 68px;
+  height: 68px;
+  border-radius: 34px;
+  margin: 0 auto 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.18);
+  animation: ringPulse 1.3s ease-out infinite;
+}
+@keyframes ringPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55);
+  }
+  80% {
+    box-shadow: 0 0 0 22px rgba(255, 255, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+.ualert-body {
+  padding: 18px 22px 4px;
+}
+.ualert-actions {
+  display: grid;
+  gap: 10px;
+  padding: 18px 18px 20px;
+}
+
+/* ---------- Thanh trượt kiểu iOS ---------- */
+.range {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+}
+.range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 3px 1px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+.step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--tint) 14%, transparent);
+  color: var(--tint);
+  font-size: 14px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin-top: 1px;
+}

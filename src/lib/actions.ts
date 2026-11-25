@@ -1,6 +1,6 @@
 // Các thao tác ghi dữ liệu theo nghiệp vụ.
 import { api, F, type BatchOp } from './backend';
-import { now, vnDate } from './time';
+import { now, vnDate, vnTime } from './time';
 import { capitalizeCode, collapse, storeCodeOf, titleCase } from './text';
 import { defaultStore, ROLE_LABEL } from './constants';
 import { isActor } from './tasks';
@@ -13,6 +13,7 @@ import type {
   ChecklistItem,
   CompletionMode,
   Leave,
+  NotifyLevel,
   Photo,
   Post,
   Priority,
@@ -39,8 +40,9 @@ export async function notify(
   to: string[],
   storeCode: string,
   from: Actor,
-  msg: { title: string; body: string; link?: string; urgent?: boolean },
+  msg: { title: string; body: string; link?: string; level?: NotifyLevel },
 ) {
+  const level: NotifyLevel = msg.level || 'normal';
   const uniq = [...new Set(to.filter((u) => u && u !== from.uid))];
   if (!uniq.length) return;
   const t = now();
@@ -50,10 +52,30 @@ export async function notify(
       type: 'set',
       col: 'notifications',
       id,
-      data: { uid, storeCode, fromUid: from.uid, fromName: from.name, title: msg.title, body: msg.body, link: msg.link || null, urgent: !!msg.urgent, read: false, createdAt: t },
+      data: { uid, storeCode, fromUid: from.uid, fromName: from.name, title: msg.title, body: msg.body, link: msg.link || null, level, urgent: level === 'urgent', read: false, createdAt: t },
     };
   });
   for (let i = 0; i < ops.length; i += 400) await api().batch(ops.slice(i, i + 400));
+}
+
+/** "hôm nay 22:30", "mai 08:00", "08:00 · 28/11" */
+function dueText(ms: number): string {
+  const d = vnDate(ms);
+  const t = vnTime(ms);
+  if (d === vnDate()) return `hôm nay ${t}`;
+  if (d === vnDate(now() + 86400000)) return `mai ${t}`;
+  return `${t} · ${d.slice(8)}/${d.slice(5, 7)}`;
+}
+
+/** Gửi thông báo thử cho chính mình (kiểm tra âm thanh và cài đặt iPhone) */
+export async function sendTestNotification(storeCode: string, me: Actor, level: NotifyLevel) {
+  const label = level === 'urgent' ? 'Khẩn' : level === 'high' ? 'Ưu tiên cao' : 'Thường';
+  await api().set('notifications', api().newId(), {
+    uid: me.uid, storeCode, fromUid: me.uid, fromName: me.name,
+    title: `Thông báo thử · ${label}`,
+    body: 'Nếu bạn nghe thấy tiếng báo và thấy biểu ngữ này, thông báo đã được cài đặt đúng.',
+    link: null, level, urgent: level === 'urgent', test: true, read: false, createdAt: now(),
+  });
 }
 
 export async function markNotificationsRead(ids: string[]) {
@@ -255,9 +277,14 @@ export async function createTasks(input: TaskInput, storeCode: string, by: Actor
     recipients = members.filter((m) => m.status === 'active' && isActor(data as unknown as Task, m)).map((m) => m.uid);
   }
   await api().batch(ops);
-  const due = input.dueAt ? ` · Hạn ${new Date(input.dueAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })}` : '';
+  const due = input.dueAt ? dueText(input.dueAt) : '';
   const link = ops.length === 1 ? `task:${ops[0].id}` : 'tasks';
-  await notify(recipients, storeCode, by, { title: `Việc mới từ ${by.name}`, body: `${base.title}${due}`, link, urgent: input.priority === 'urgent' });
+  await notify(recipients, storeCode, by, {
+    title: `Việc mới · ${base.title}`,
+    body: `${by.name} giao${due ? ` · Hạn ${due}` : ''}${input.checklist.filter((x) => x.trim()).length ? ` · ${input.checklist.filter((x) => x.trim()).length} bước` : ''}`,
+    link,
+    level: input.priority,
+  });
   return ops.map((o) => o.id);
 }
 
@@ -324,7 +351,7 @@ export async function approveTask(task: Task, by: Actor) {
 
 export async function returnTask(task: Task, by: Actor, reason: string) {
   await api().update('tasks', task.id, { status: 'returned', updatedAt: now(), activity: F.arrayUnion(activity('returned', by, reason)) });
-  if (task.completedBy) await notify([task.completedBy], task.storeCode, by, { title: 'Việc bị trả lại', body: `${task.title} — ${reason}`, link: `task:${task.id}`, urgent: true });
+  if (task.completedBy) await notify([task.completedBy], task.storeCode, by, { title: 'Việc bị trả lại', body: `${task.title} — ${reason}`, link: `task:${task.id}`, level: 'high' });
 }
 
 export async function commentTask(task: Task, by: Actor, text: string, notifyUids: string[]) {
@@ -334,7 +361,7 @@ export async function commentTask(task: Task, by: Actor, text: string, notifyUid
 
 export async function nudgeTask(task: Task, by: Actor, uids: string[]) {
   await api().update('tasks', task.id, { updatedAt: now(), activity: F.arrayUnion(activity('nudged', by)) });
-  await notify(uids, task.storeCode, by, { title: 'Nhắc việc', body: `${by.name} nhắc bạn: ${task.title}`, link: `task:${task.id}`, urgent: task.priority === 'urgent' });
+  await notify(uids, task.storeCode, by, { title: 'Nhắc việc', body: `${by.name} nhắc bạn: ${task.title}`, link: `task:${task.id}`, level: task.priority === 'urgent' ? 'urgent' : 'high' });
 }
 
 export async function deleteTask(task: Task) {
@@ -393,7 +420,7 @@ export async function reviewReport(rep: Report, by: Actor, result: 'pass' | 'fai
       title: 'Báo cáo 8NTTT chưa đạt',
       body: `${rep.areaName}: ${note.trim() || 'Vui lòng chụp lại'}`,
       link: `report:${rep.id}`,
-      urgent: true,
+      level: 'high',
     });
   }
 }
@@ -454,7 +481,7 @@ export async function savePost(post: Partial<Post> & { storeCode: string }, by: 
       title: isNew ? (post.requireAck ? 'Bài mới cần xác nhận' : 'Bài mới trong Thư viện') : 'Bài đã được cập nhật',
       body: post.title || '',
       link: `post:${id}`,
-      urgent: post.category === 'notice',
+      level: post.category === 'notice' ? 'high' : 'normal',
     });
   }
   return id;

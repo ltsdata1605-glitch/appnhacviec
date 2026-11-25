@@ -93,11 +93,15 @@ export function ProfileSheet({ close }: { close: () => void }) {
             <Cell
               icon="bell"
               iconColor="red"
-              title="Thông báo đẩy"
-              detail={push === 'granted' ? 'Đang bật' : push === 'denied' ? 'Đang tắt' : push === 'unsupported' ? 'Chưa hỗ trợ' : 'Chưa bật'}
-              chevron={push !== 'granted'}
-              onClick={push !== 'granted' ? enablePush : undefined}
+              title="Thông báo & âm thanh"
+              detail={push === 'granted' ? 'Đang bật' : push === 'denied' ? 'Đang tắt' : 'Chưa bật'}
+              chevron
+              onClick={async () => {
+                const { NotifySettingsSheet } = await import('../notify/Notifications');
+                ui.sheet((c) => <NotifySettingsSheet close={c} />);
+              }}
             />
+            {push !== 'granted' && push !== 'unsupported' && <Cell icon="bolt" iconColor="orange" title="Bật thông báo đẩy ngay" chevron onClick={enablePush} />}
             {isIOS() && !isStandalone() && <Cell icon="plusSquare" iconColor="blue" title="Cài app lên Màn hình chính" chevron onClick={() => ui.sheet((c) => <InstallGuide close={c} />)} />}
           </Group>
         </Section>

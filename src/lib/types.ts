@@ -250,6 +250,8 @@ export interface Leave {
   createdAt: number;
 }
 
+export type NotifyLevel = 'normal' | 'high' | 'urgent';
+
 export interface AppNotification {
   id: string;
   uid: string; // người nhận
@@ -259,7 +261,9 @@ export interface AppNotification {
   title: string;
   body: string;
   link?: string; // ví dụ 'task:ID', 'report:ID', 'post:ID', 'people'
-  urgent?: boolean;
+  level?: NotifyLevel; // mức độ: thường / ưu tiên cao / khẩn
+  urgent?: boolean; // tương thích dữ liệu cũ (= level 'urgent')
+  test?: boolean; // thông báo thử
   read: boolean;
   createdAt: number;
 }
