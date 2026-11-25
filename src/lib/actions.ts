@@ -1,7 +1,7 @@
 // Các thao tác ghi dữ liệu theo nghiệp vụ.
 import { api, F, type BatchOp } from './backend';
 import { now, vnDate } from './time';
-import { capitalizeCode, storeCodeOf, titleCase } from './text';
+import { capitalizeCode, collapse, storeCodeOf, titleCase } from './text';
 import { defaultStore, ROLE_LABEL } from './constants';
 import { isActor } from './tasks';
 import { reportId } from './reports';
@@ -476,5 +476,5 @@ export async function updateStore(code: string, patch: Partial<Store>) {
 
 export async function createStore(code: string, name: string, chain: Chain) {
   const c = storeCodeOf(code);
-  await api().set('stores', c, { ...defaultStore(c, titleCase(name), chain), createdAt: now() });
+  await api().set('stores', c, { ...defaultStore(c, collapse(name), chain), createdAt: now() });
 }

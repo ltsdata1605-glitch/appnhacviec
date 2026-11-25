@@ -7,7 +7,7 @@ import { Icon } from '../../ui/Icon';
 import { CHAIN_LABEL } from '../../lib/criteria';
 import { getPosition, geoErrorText } from '../../lib/geo';
 import { updateStore } from '../../lib/actions';
-import { capitalizeCode, titleCase } from '../../lib/text';
+import { capitalizeCode, collapse } from '../../lib/text';
 import type { Chain, Store } from '../../lib/types';
 
 export function StoreSettingsScreen() {
@@ -62,7 +62,7 @@ export function StoreSettingsScreen() {
             chevron
             onClick={async () => {
               const v = await ui.prompt('Tên siêu thị', undefined, 'Tên', 'Lưu', st.name);
-              if (v?.trim()) save({ name: titleCase(v) });
+              if (v?.trim()) save({ name: collapse(v) }); // giữ nguyên chữ hoa/thường như người dùng gõ (mã viết tắt)
             }}
           />
           <Cell
