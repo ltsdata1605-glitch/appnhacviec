@@ -13,7 +13,7 @@ export function distanceMeters(a: { lat: number; lng: number }, b: { lat: number
   return Math.round(2 * R * Math.asin(Math.sqrt(s)));
 }
 
-export function getPosition(timeout = 12000): Promise<Position> {
+export function getPosition(timeout = 12000, maximumAge = 10000): Promise<Position> {
   return new Promise((resolve, reject) => {
     if (!('geolocation' in navigator)) {
       reject(new Error('unsupported'));
@@ -22,9 +22,15 @@ export function getPosition(timeout = 12000): Promise<Position> {
     navigator.geolocation.getCurrentPosition(
       (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) }),
       (e) => reject(new Error(e.code === 1 ? 'denied' : e.code === 3 ? 'timeout' : 'unavailable')),
-      { enableHighAccuracy: true, timeout, maximumAge: 30000 },
+      { enableHighAccuracy: true, timeout, maximumAge },
     );
   });
+}
+
+/** 35 m, 1,2 km */
+export function formatDistance(m: number): string {
+  if (m < 1000) return `${m} m`;
+  return `${(m / 1000).toFixed(1).replace('.', ',')} km`;
 }
 
 export function geoErrorText(code: string): string {

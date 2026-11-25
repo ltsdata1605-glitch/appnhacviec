@@ -10,9 +10,12 @@ import {
   signInWithRedirect,
   signOut as fbSignOut,
   browserPopupRedirectResolver,
+  connectAuthEmulator,
+  signInWithCredential,
 } from 'firebase/auth';
 import {
   arrayUnion,
+  connectFirestoreEmulator,
   collection,
   deleteDoc,
   deleteField,
@@ -31,7 +34,7 @@ import {
   writeBatch,
   type DocumentData,
 } from 'firebase/firestore';
-import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import { connectStorageEmulator, deleteObject, getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { firebaseConfig, isFieldOp, vapidKey, type Backend, type Where } from './backend';
 import type { AuthUser } from './types';
@@ -71,11 +74,20 @@ export async function createFirebaseBackend(): Promise<Backend> {
     popupRedirectResolver: browserPopupRedirectResolver,
   });
   auth.languageCode = 'vi';
+  const useEmulators = import.meta.env.VITE_USE_EMULATORS === '1';
+  if (useEmulators) connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   const db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     ignoreUndefinedProperties: true,
   });
   const storage = getStorage(app);
+  if (useEmulators) {
+    // Chỉ dùng cho kiểm thử tự động trên Firebase Emulator — không có trong bản chạy thật.
+    connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    connectStorageEmulator(storage, '127.0.0.1', 9199);
+    (window as unknown as { __nvTestSignIn: (email: string, name: string) => Promise<unknown> }).__nvTestSignIn = (email, name) =>
+      signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({ sub: email, email, email_verified: true, name })));
+  }
 
   // Hoàn tất đăng nhập sau khi chuyển hướng (iPhone)
   getRedirectResult(auth).catch((e) => console.warn('redirect', e));
@@ -128,13 +140,14 @@ export async function createFirebaseBackend(): Promise<Backend> {
         },
       );
     },
-    watchDoc(col, id, cb) {
+    watchDoc(col, id, cb, onError) {
       return onSnapshot(
         doc(db, col, id),
         (snap) => cb(snap.exists() ? mapDoc(snap.id, snap.data()) : null),
         (e) => {
           console.warn('watchDoc', col, id, e);
-          cb(null);
+          if (onError) onError(e);
+          else cb(null);
         },
       );
     },

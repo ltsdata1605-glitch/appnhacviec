@@ -25,10 +25,10 @@ export function AdminScreen() {
   const onPending = async (u: UserProfile) => {
     const v = await ui.actions(
       [
-        { label: u.storeName ? `Duyệt & tạo kho ${u.storeCode}` : `Duyệt quản lý kho ${u.storeCode}`, value: 'ok', icon: 'check' },
+        { label: u.chain ? `Duyệt & tạo kho ${u.storeCode}` : `Duyệt quản lý kho ${u.storeCode}`, value: 'ok', icon: 'check' },
         { label: 'Từ chối', value: 'no', icon: 'xmark', destructive: true },
       ],
-      `${u.fullName} · ${u.userCode || ''}${u.storeName ? ` · ${u.storeName} (${CHAIN_SHORT[u.chain || 'DMX']})` : ''}`,
+      `${u.fullName} · ${u.userCode || ''}${u.chain ? ` · kho mới ${CHAIN_SHORT[u.chain]}` : ''}`,
     );
     if (v === 'ok') {
       await approveUser(u, actor, { department: 'Quản lý' });
@@ -93,7 +93,7 @@ export function AdminScreen() {
                 leading={<Avatar name={u.fullName} src={u.photoURL} size={40} />}
                 sepInset={68}
                 title={u.fullName}
-                sub={`Kho ${u.storeCode}${u.storeName ? ` (mới) · ${u.storeName}` : ''} · ${relative(u.createdAt)}`}
+                sub={`Kho ${u.storeCode}${u.chain ? ` (mới · ${CHAIN_SHORT[u.chain]})` : ''} · ${relative(u.createdAt)}`}
                 trailing={<Pill sm color="blue">Duyệt</Pill>}
                 onClick={() => onPending(u)}
               />

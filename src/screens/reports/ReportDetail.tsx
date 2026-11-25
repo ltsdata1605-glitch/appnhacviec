@@ -7,6 +7,7 @@ import { Avatar, Cell, Check, Empty, Group, Img, Loading, Pill, Section } from '
 import { Icon } from '../../ui/Icon';
 import { dmy, stamp, vnDate, vnTime } from '../../lib/time';
 import { isLate } from '../../lib/reports';
+import { formatDistance } from '../../lib/geo';
 import { reviewReport } from '../../lib/actions';
 import { useActor } from '../shared';
 import { useCapture } from './Capture';
@@ -118,7 +119,7 @@ export function ReportDetailScreen({ id }: { id: string }) {
             icon="location"
             iconColor={r.geo?.distance != null && s.store && r.geo.distance <= (s.store.radius || 200) + 100 ? 'green' : 'gray'}
             title="Vị trí"
-            detail={r.geo ? (r.geo.distance != null ? `Cách ${r.geo.distance} m` : 'Đã ghi nhận') : 'Không có'}
+            detail={r.geo ? (r.geo.distance != null ? `Cách ${formatDistance(r.geo.distance)}` : 'Đã ghi nhận') : 'Không có'}
           />
         </Group>
       </Section>

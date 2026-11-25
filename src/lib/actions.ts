@@ -84,7 +84,6 @@ export interface RegisterInput {
   code: string; // user hoặc hãng
   fullName: string;
   storeCode: string;
-  storeName?: string;
   chain?: Chain;
 }
 
@@ -104,7 +103,6 @@ export async function register(auth: AuthUser, input: RegisterInput, isAdmin: bo
     userCode: input.role === 'pg' ? undefined : capitalizeCode(input.code),
     brand: input.role === 'pg' ? capitalizeCode(input.code) : undefined,
     department: input.role === 'pg' ? 'PG' : input.role === 'manager' ? 'Quản lý' : undefined,
-    storeName: input.role === 'manager' && !existing ? titleCase(input.storeName || '') : undefined,
     chain: input.role === 'manager' && !existing ? input.chain : undefined,
     createdAt: t,
     updatedAt: t,
@@ -112,7 +110,7 @@ export async function register(auth: AuthUser, input: RegisterInput, isAdmin: bo
   if (isAdmin) {
     profile.approvedAt = t;
     profile.approvedBy = auth.uid;
-    if (!existing) await api().set('stores', store, { ...defaultStore(store, profile.storeName || `Siêu thị ${store}`, input.chain || 'DMX'), createdAt: t });
+    if (!existing) await api().set('stores', store, { ...defaultStore(store, `Siêu thị ${store}`, input.chain || 'DMX'), createdAt: t });
   }
   await api().set('users', auth.uid, profile as Record<string, unknown>);
 }
@@ -402,9 +400,15 @@ export async function reviewReport(rep: Report, by: Actor, result: 'pass' | 'fai
 
 // ---------------- Khu vực ----------------
 export async function saveArea(area: Partial<Area> & { storeCode: string }) {
-  const id = area.id || api().newId();
+  if (area.id) {
+    // Chỉ cập nhật các trường được truyền vào — không ghi đè tiêu chí, thứ tự, ngày tạo
+    const { id, ...patch } = area;
+    await api().update('areas', id, patch as Record<string, unknown>);
+    return id;
+  }
+  const id = api().newId();
   const t = now();
-  await api().set('areas', id, { active: true, order: 999, createdAt: t, createdDate: vnDate(t), criteria: [], ...area, id }, true);
+  await api().set('areas', id, { active: true, order: 999, criteria: [], ownerUid: null, ownerSince: null, backupUid: null, createdAt: t, createdDate: vnDate(t), ...area, id });
   return id;
 }
 

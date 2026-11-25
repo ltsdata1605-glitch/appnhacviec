@@ -37,7 +37,7 @@ export interface Backend {
   isAdmin(user: AuthUser): Promise<boolean>;
 
   watch<T>(col: string, where: Where[], cb: (docs: T[]) => void, onError?: (e: Error) => void): () => void;
-  watchDoc<T>(col: string, id: string, cb: (doc: T | null) => void): () => void;
+  watchDoc<T>(col: string, id: string, cb: (doc: T | null) => void, onError?: (e: Error) => void): () => void;
   get<T>(col: string, id: string): Promise<T | null>;
   query<T>(col: string, where: Where[]): Promise<T[]>;
   set(col: string, id: string, data: Record<string, unknown>, merge?: boolean): Promise<void>;

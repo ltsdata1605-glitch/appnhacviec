@@ -84,6 +84,11 @@ function Main() {
   const [tab, setTab] = useState<TabKey>('home');
   const [depths, setDepths] = useState<Record<string, number>>({});
   const stacks = useRef<Partial<Record<TabKey, StackHandle | null>>>({});
+  // Đổi kho đang xem (Admin) hoặc đổi vai trò: các ngăn điều hướng được tạo lại từ đầu
+  useEffect(() => {
+    setDepths({});
+    setTab('home');
+  }, [s.storeCode, manager]);
   const today = new Date().getDate();
 
   const tabs: { key: TabKey; label: string; icon: IconName }[] = manager

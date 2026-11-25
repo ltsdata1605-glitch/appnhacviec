@@ -45,6 +45,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!auth) {
       setIsAdmin(false);
@@ -54,15 +55,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     api()
       .isAdmin(auth)
       .then((v) => alive && setIsAdmin(v));
-    const off = api().watchDoc<UserProfile>('users', auth.uid, (p) => {
-      setProfile(p);
-      setProfileLoaded(true);
-    });
+    let timer = 0;
+    const off = api().watchDoc<UserProfile>(
+      'users',
+      auth.uid,
+      (p) => {
+        setProfile(p);
+        setProfileLoaded(true);
+      },
+      // Lỗi tạm thời (mất mạng, máy chủ bận): giữ nguyên hồ sơ đang có và thử lại sau 3 giây,
+      // tránh đưa người dùng đã duyệt quay về màn hình đăng ký.
+      () => {
+        timer = window.setTimeout(() => alive && setRetry((n) => n + 1), 3000);
+      },
+    );
     return () => {
       alive = false;
+      clearTimeout(timer);
       off();
     };
-  }, [auth]);
+  }, [auth, retry]);
 
   const active = profile?.status === 'active';
   const storeCode = (isAdmin && viewStore) || (active ? profile!.storeCode : null) || (isAdmin ? viewStore : null);

@@ -62,7 +62,6 @@ export function OnboardingScreen({ initial }: { initial?: { role: Role; code: st
   const [fullName, setFullName] = useState(initial?.fullName || s.auth?.displayName || '');
   const [storeCode, setStoreCode] = useState(initial?.storeCode || '');
   const [store, setStore] = useState<Store | null | undefined>(undefined);
-  const [storeName, setStoreName] = useState('');
   const [chain, setChain] = useState<Chain>('DMX');
   const [busy, setBusy] = useState(false);
 
@@ -99,12 +98,12 @@ export function OnboardingScreen({ initial }: { initial?: { role: Role; code: st
 
   const isPG = role === 'pg';
   const needStore = role === 'manager' && store === null;
-  const valid = code.trim().length >= 2 && fullName.trim().split(' ').length >= 2 && sc.length >= 3 && (role === 'manager' ? store !== undefined && (!needStore || storeName.trim().length >= 3) : !!store);
+  const valid = code.trim().length >= 2 && fullName.trim().split(' ').length >= 2 && sc.length >= 3 && (role === 'manager' ? store !== undefined : !!store);
 
   const submit = async () => {
     setBusy(true);
     try {
-      await register(s.auth!, { role, code, fullName, storeCode: sc, storeName, chain }, s.isAdmin);
+      await register(s.auth!, { role, code, fullName, storeCode: sc, chain }, s.isAdmin);
     } catch (e) {
       ui.alert({ title: 'Chưa gửi được', message: (e as Error).message });
     } finally {
@@ -150,12 +149,8 @@ export function OnboardingScreen({ initial }: { initial?: { role: Role; code: st
       </Section>
 
       {needStore && (
-        <Section title="Kho mới" small footer="Mã kho này chưa có trên hệ thống. Admin sẽ tạo kho khi duyệt.">
+        <Section title="Kho mới · chọn chuỗi" small footer="Mã kho này chưa có trên hệ thống. Admin sẽ tạo kho khi duyệt. Chuỗi quyết định bộ tiêu chí 8NTTT; tên siêu thị đổi sau trong Cài đặt siêu thị.">
           <Group>
-            <div className="field">
-              <label>Tên siêu thị</label>
-              <input value={storeName} onChange={(e) => setStoreName(e.target.value)} placeholder="Ví dụ: ĐMX Quận 7" autoCapitalize="words" />
-            </div>
             {(Object.keys(CHAIN_LABEL) as Chain[]).map((c) => (
               <Cell key={c} title={CHAIN_LABEL[c]} trailing={chain === c ? <Icon name="check" size={20} className="tint" stroke={2.4} /> : undefined} onClick={() => setChain(c)} />
             ))}

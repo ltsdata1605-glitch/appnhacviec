@@ -2146,3 +2146,7 @@ button.cell:active,
 .swipe:last-child > .swipe-content > .cell::after {
   display: none;
 }
+
+.cell.destructive.center-text .cell-title {
+  color: var(--red);
+}

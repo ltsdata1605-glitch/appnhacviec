@@ -6,7 +6,7 @@ import { useUI } from '../../ui/Overlay';
 import { Icon } from '../../ui/Icon';
 import { Check, Group, Section, Cell, Img } from '../../ui/controls';
 import { captureFrame, type Shot } from '../../lib/image';
-import { distanceMeters, geoErrorText, getPosition, type Position } from '../../lib/geo';
+import { distanceMeters, formatDistance, geoErrorText, getPosition, type Position } from '../../lib/geo';
 import { now, stamp, vnDate } from '../../lib/time';
 import { api } from '../../lib/backend';
 import { submitReport } from '../../lib/actions';
@@ -70,13 +70,14 @@ function CaptureFlow({ area, existing, onClose }: { area: Area; existing?: Repor
   const [mode, setMode] = useState<'camera' | 'compose'>('camera');
   const [geo, setGeo] = useState<GeoState>({ status: 'loading' });
 
-  const locate = () => {
+  // fresh = true khi người dùng bấm "Thử lại": bỏ vị trí cũ lưu tạm, lấy vị trí mới
+  const locate = (fresh = false) => {
     setGeo({ status: 'loading' });
-    getPosition()
+    getPosition(fresh ? 20000 : 12000, fresh ? 0 : 10000)
       .then((pos) => setGeo({ status: 'ok', pos, distance: store.location ? distanceMeters(pos, store.location) : null }))
       .catch((e: Error) => setGeo({ status: 'error', code: e.message }));
   };
-  useEffect(locate, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => locate(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => shots.forEach((x) => URL.revokeObjectURL(x.previewUrl)), []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -108,7 +109,7 @@ function CaptureFlow({ area, existing, onClose }: { area: Area; existing?: Repor
       setShots={setShots}
       minPhotos={minPhotos}
       geo={geo}
-      relocate={locate}
+      relocate={() => locate(true)}
       onMore={() => setMode('camera')}
       onClose={close}
       onDone={onClose}
@@ -188,7 +189,7 @@ function CameraView({
     };
   }, [facing]);
 
-  const geoText = geo.status === 'ok' && geo.distance !== null ? `Cách siêu thị ${geo.distance} m` : undefined;
+  const geoText = geo.status === 'ok' && geo.distance !== null ? `Cách siêu thị ${formatDistance(geo.distance)}` : undefined;
 
   const shoot = async () => {
     if (!video.current || busy || shots.length >= MAX_PHOTOS) return;
@@ -416,7 +417,7 @@ function Compose({
               <Cell
                 icon="location"
                 iconColor={geoOk ? 'green' : 'red'}
-                title={geo.distance === null ? 'Đã ghi nhận vị trí' : geoOk ? `Tại siêu thị · cách ${geo.distance} m` : `Cách siêu thị ${geo.distance} m`}
+                title={geo.distance === null ? 'Đã ghi nhận vị trí' : geoOk ? `Tại siêu thị · cách ${formatDistance(geo.distance)}` : `Cách siêu thị ${formatDistance(geo.distance)}`}
                 sub={
                   !store.location
                     ? 'Siêu thị chưa cài vị trí chuẩn, quản lý cần cài trong Cài đặt kho.'
