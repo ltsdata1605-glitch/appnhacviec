@@ -2,6 +2,7 @@
 
 Ứng dụng giao việc, nhắc việc và báo cáo hình ảnh 8NTTT cho siêu thị (TGDĐ, ĐMX, TopZone). Thiết kế theo chuẩn iOS cho iPhone 15 Pro Max trở lên, cài lên Màn hình chính như app thật (PWA), nhận thông báo đẩy và số đỏ trên biểu tượng.
 
+- **Địa chỉ app:** <https://nhac-viec-90eb7.firebaseapp.com> — mở bằng Safari trên iPhone, chọn Chia sẻ › Thêm vào MH chính.
 - **Hướng dẫn cài đặt từng bước:** [`docs/HUONG-DAN-CAI-DAT.md`](docs/HUONG-DAN-CAI-DAT.md)
 - **Xem thử với dữ liệu mẫu:** chạy app khi chưa có file `.env`, hoặc thêm `?demo=1` vào đường link.
 
@@ -33,6 +34,14 @@ src/
 functions/    Cloud Functions: thông báo đẩy, nhắc việc theo giờ, việc lặp lại, dọn ảnh
 public/       biểu tượng app, màn hình khởi động iPhone, service worker
 ```
+
+## Vì sao dùng Firebase Hosting, không dùng GitHub Pages
+
+- **Đăng nhập Google trên iPhone:** Safari chặn cookie giữa hai tên miền khác nhau. App phải chạy trên cùng tên miền với trang đăng nhập Firebase (`*.firebaseapp.com`) thì đăng nhập bằng Google mới ổn định trong app cài trên Màn hình chính. GitHub Pages (`*.github.io`) là tên miền khác nên dễ bị kẹt đăng nhập.
+- **Mã nguồn cần được build:** thư mục gốc của repo là mã nguồn React/TypeScript, không phải trang web chạy được. GitHub Pages bật ở nhánh `main` / `(root)` sẽ chỉ hiện trang trắng.
+- **Một nơi quản lý:** dữ liệu, ảnh, nhắc việc tự động và app cùng nằm trong một dự án Firebase. Hosting của Firebase miễn phí ở mức dùng của siêu thị, hỗ trợ đường dẫn của app một trang (SPA) và tiêu đề bảo mật.
+
+GitHub chỉ dùng để **lưu mã nguồn**. Nên tắt GitHub Pages (Settings › Pages › Branch: None) để nhân viên không mở nhầm link trắng.
 
 ## Chạy trên máy
 
