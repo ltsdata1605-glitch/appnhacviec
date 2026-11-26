@@ -1,5 +1,5 @@
 // Ngăn xếp điều hướng kiểu iOS: đẩy trang trượt ngang, vuốt từ mép trái để quay lại.
-import { createContext, useCallback, useContext, useImperativeHandle, useRef, useState, forwardRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState, forwardRef, type ReactNode } from 'react';
 
 interface Entry {
   key: number;
@@ -30,6 +30,20 @@ export const Stack = forwardRef<StackHandle, { root: ReactNode; onDepth?: (d: nu
   const dragState = useRef<{ x: number; y: number; dx: number; t: number; locked: boolean | null } | null>(null);
 
   const depth = entries.filter((e) => e.phase !== 'exit').length - 1;
+
+  // Chuyển tab: ngăn vừa hiện ra mờ dần vào, nội dung nổi nhẹ lên
+  const [tabIn, setTabIn] = useState(false);
+  const shownOnce = useRef(false);
+  useEffect(() => {
+    if (hidden) return;
+    if (!shownOnce.current) {
+      shownOnce.current = true;
+      return;
+    }
+    setTabIn(true);
+    const t = window.setTimeout(() => setTabIn(false), 420);
+    return () => clearTimeout(t);
+  }, [hidden]);
 
   const push = useCallback(
     (node: ReactNode) => {
@@ -142,7 +156,7 @@ export const Stack = forwardRef<StackHandle, { root: ReactNode; onDepth?: (d: nu
 
   return (
     <NavCtx.Provider value={api}>
-      <div className="stack" style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      <div className={`stack${tabIn ? ' tab-in' : ''}`} style={hidden ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
         {entries.map((e, i) => {
           const isTop = e.key === topKey;
           const exiting = e.phase === 'exit';

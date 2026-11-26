@@ -3,7 +3,7 @@ import { useSession, useStoreData } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
-import { Avatar, Cell, Group, Pill, Ring, Section, Segmented } from '../../ui/controls';
+import { Avatar, Cell, Group, Pill, Ring, Section, Segmented, SkeletonList, SkeletonStats } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { dueLabel, longDate, monthRange, vnDate, now, duration, vnAt } from '../../lib/time';
 import { isOpen, sortTasks, taskState } from '../../lib/tasks';
@@ -108,6 +108,12 @@ export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
 
       {canMine && view === 'mine' ? (
         <MyDaySections goTab={goTab} />
+      ) : d.loading ? (
+        <>
+          <SkeletonStats />
+          <SkeletonList rows={2} />
+          <SkeletonList rows={3} />
+        </>
       ) : (
         <>
           <Section>

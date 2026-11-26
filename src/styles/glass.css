@@ -638,3 +638,322 @@ body {
 .header-pills .segmented button {
   padding: 0 13px;
 }
+
+/* =========================================================
+   Chuyển động: khởi động, vào app, chuyển tab, khung chờ
+   ========================================================= */
+
+/* ---------- Màn khởi động (trùng ảnh khởi động của iPhone: nền #f2f2f7, biểu tượng 88pt giữa màn) ---------- */
+.launch {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: #f2f2f7;
+}
+@media (prefers-color-scheme: dark) {
+  .launch {
+    background: #000;
+  }
+}
+.launch-icon {
+  display: block;
+  border-radius: 22.5%;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(42, 131, 233, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.25);
+  animation: launchGlow 2.6s ease-in-out infinite;
+}
+.launch-icon svg {
+  display: block;
+}
+/* Chuông rung nhẹ rồi nghỉ, lặp lại trong lúc chờ */
+.launch-bell {
+  transform-box: fill-box;
+  transform-origin: 50% 3%;
+  animation: bellRing 2.6s cubic-bezier(0.36, 0, 0.3, 1) infinite;
+}
+.launch-clapper {
+  transform-box: fill-box;
+  transform-origin: 50% -790%; /* treo cùng điểm với chuông */
+  animation: clapperSwing 2.6s cubic-bezier(0.36, 0, 0.3, 1) infinite;
+}
+@keyframes bellRing {
+  0%,
+  10% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(15deg);
+  }
+  23% {
+    transform: rotate(-13deg);
+  }
+  31% {
+    transform: rotate(9deg);
+  }
+  39% {
+    transform: rotate(-6deg);
+  }
+  47% {
+    transform: rotate(3deg);
+  }
+  55%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+@keyframes clapperSwing {
+  0%,
+  13% {
+    transform: rotate(0deg);
+  }
+  18% {
+    transform: rotate(12deg);
+  }
+  26% {
+    transform: rotate(-15deg);
+  }
+  34% {
+    transform: rotate(11deg);
+  }
+  42% {
+    transform: rotate(-7deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+  58%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+@keyframes launchGlow {
+  0%,
+  100% {
+    box-shadow: 0 8px 24px rgba(42, 131, 233, 0.32), inset 0 0 0 0.5px rgba(255, 255, 255, 0.25);
+  }
+  50% {
+    box-shadow: 0 10px 34px rgba(42, 131, 233, 0.5), inset 0 0 0 0.5px rgba(255, 255, 255, 0.25);
+  }
+}
+/* Ba chấm chờ: chỉ hiện nếu mở lâu hơn 0,7 giây */
+.launch-dots {
+  position: absolute;
+  top: calc(50% + 74px);
+  left: 50%;
+  display: flex;
+  gap: 7px;
+  transform: translateX(-50%);
+  opacity: 0;
+  animation: dotsShow 0.4s ease 0.7s forwards;
+}
+.launch-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2a83e9;
+  opacity: 0.35;
+  animation: dotPulse 1.1s ease-in-out infinite;
+}
+.launch-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.launch-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes dotsShow {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes dotPulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0) scale(0.9);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1);
+  }
+}
+.launch-slow {
+  position: absolute;
+  top: calc(50% + 100px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--label-2);
+  animation: fadeIn 0.4s ease both;
+}
+/* Vào app: biểu tượng phóng to mờ dần, nền tan ra để lộ giao diện */
+.launch.out {
+  pointer-events: none;
+  animation: launchFade 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.06s forwards;
+}
+.launch.out .launch-icon {
+  animation: launchZoom 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  animation-delay: 0s !important;
+}
+.launch.out .launch-bell,
+.launch.out .launch-clapper {
+  animation: none;
+}
+.launch.out .launch-dots,
+.launch.out .launch-slow {
+  animation: fadeOut 0.15s ease forwards !important;
+  animation-delay: 0s !important;
+}
+@keyframes launchZoom {
+  to {
+    transform: scale(1.5);
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+@keyframes launchFade {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------- Vào app lần đầu: khung app nở ra, nội dung nổi lên lần lượt, thanh tab trượt lên ---------- */
+/* Hiệu ứng đặt trên .app (đã cố định toàn màn hình); .app-frame không có chiều cao riêng nên không được biến đổi */
+.app.entering {
+  animation: appIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.app.entering .scroll > * {
+  animation: riseIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.app.entering .scroll > :nth-child(2) {
+  animation-delay: 0.04s;
+}
+.app.entering .scroll > :nth-child(3) {
+  animation-delay: 0.08s;
+}
+.app.entering .scroll > :nth-child(4) {
+  animation-delay: 0.12s;
+}
+.app.entering .scroll > :nth-child(5) {
+  animation-delay: 0.16s;
+}
+.app.entering .scroll > :nth-child(6) {
+  animation-delay: 0.2s;
+}
+.app.entering .scroll > :nth-child(n + 7) {
+  animation-delay: 0.24s;
+}
+.app.entering .tabbar:not(.hidden) {
+  animation: tabbarIn 0.75s var(--bounce) 0.12s both;
+}
+@keyframes appIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+@keyframes tabbarIn {
+  from {
+    opacity: 0;
+    transform: translateY(120%) scale(0.92);
+  }
+}
+
+/* ---------- Chuyển tab ---------- */
+.stack.tab-in {
+  animation: fadeIn 0.24s ease-out both;
+}
+.stack.tab-in .screen:not([aria-hidden='true']) .scroll {
+  animation: tabRise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes tabRise {
+  from {
+    opacity: 0.4;
+    transform: translateY(10px);
+  }
+}
+
+/* ---------- Khung chờ ---------- */
+.sk-section {
+  animation: fadeIn 0.3s ease both;
+}
+.sk-title {
+  display: block;
+  width: 38%;
+  height: 20px;
+  border-radius: 8px;
+  margin: 4px 4px 12px;
+}
+.sk-list {
+  display: grid;
+  gap: 8px;
+}
+.sk-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--bg-2);
+  box-shadow: var(--shadow-card);
+}
+.sk-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  flex: none;
+}
+.sk-lines {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.sk-line {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+}
+.sk-line.short {
+  width: 34%;
+}
+.sk-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  flex: none;
+}
+.sk-stat {
+  pointer-events: none;
+}
+.skeleton {
+  background: linear-gradient(100deg, var(--fill-4) 30%, color-mix(in srgb, var(--fill-4) 40%, transparent) 50%, var(--fill-4) 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.3s infinite linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launch-icon,
+  .launch-bell,
+  .launch-clapper,
+  .launch-dots i,
+  .app.entering,
+  .app.entering .scroll > *,
+  .app.entering .tabbar,
+  .stack.tab-in,
+  .stack.tab-in .scroll {
+    animation: none !important;
+  }
+  .launch.out {
+    animation: launchFade 0.2s ease forwards;
+  }
+}

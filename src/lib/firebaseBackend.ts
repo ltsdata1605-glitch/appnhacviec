@@ -105,10 +105,10 @@ async function migrateAuthFromIndexedDB(apiKey: string) {
       resolve(null);
     }
   });
-  const value = await withTimeout(read, 1500);
+  const value = await withTimeout(read, 900);
   try {
     if (value && value !== 'timeout') localStorage.setItem(key, JSON.stringify(value));
-    if (value !== 'timeout') localStorage.setItem('nv-auth-idb-checked', '1');
+    localStorage.setItem('nv-auth-idb-checked', '1');
   } catch {
     /* bỏ qua */
   }
@@ -117,9 +117,10 @@ async function migrateAuthFromIndexedDB(apiKey: string) {
 export async function createFirebaseBackend(): Promise<Backend> {
   const app = initializeApp(firebaseConfig as Record<string, string>);
   await migrateAuthFromIndexedDB(String(firebaseConfig.apiKey || ''));
+  // Không gắn trình xử lý chuyển hướng lúc khởi tạo: nếu gắn, mỗi lần mở app Firebase phải tải khung đăng nhập
+  // ẩn và thư viện Google (chậm 1–3 giây trên mạng di động). Chỉ dùng khi đang đăng nhập bằng Google.
   const auth = initializeAuth(app, {
     persistence: [browserLocalPersistence],
-    popupRedirectResolver: browserPopupRedirectResolver,
   });
   auth.languageCode = 'vi';
   const useEmulators = import.meta.env.VITE_USE_EMULATORS === '1';
@@ -164,8 +165,26 @@ export async function createFirebaseBackend(): Promise<Backend> {
       signInWithCredential(auth, GoogleAuthProvider.credential(JSON.stringify({ sub: email, email, email_verified: true, name })));
   }
 
-  // Hoàn tất đăng nhập sau khi chuyển hướng (iPhone)
-  getRedirectResult(auth).catch((e) => console.warn('redirect', e));
+  // Hoàn tất đăng nhập sau khi chuyển hướng (iPhone) — chỉ khi vừa bấm "Đăng nhập với Google"
+  const REDIRECT_KEY = 'nv-auth-redirect';
+  let redirectPending = false;
+  try {
+    redirectPending = sessionStorage.getItem(REDIRECT_KEY) === '1';
+  } catch {
+    /* bỏ qua */
+  }
+  const redirectDone: Promise<void> = redirectPending
+    ? getRedirectResult(auth, browserPopupRedirectResolver)
+        .then(() => undefined)
+        .catch((e) => console.warn('redirect', e))
+        .finally(() => {
+          try {
+            sessionStorage.removeItem(REDIRECT_KEY);
+          } catch {
+            /* bỏ qua */
+          }
+        })
+    : Promise.resolve();
 
   const toUser = (u: { uid: string; email: string | null; displayName: string | null; photoURL: string | null }): AuthUser => ({
     uid: u.uid,
@@ -182,15 +201,31 @@ export async function createFirebaseBackend(): Promise<Backend> {
   const backend: Backend = {
     mode: 'firebase',
     onAuth(cb) {
-      return onAuthStateChanged(auth, (u) => cb(u ? toUser(u) : null));
+      // Đang quay về từ trang đăng nhập Google: chờ có kết quả rồi mới báo, tránh hiện màn đăng nhập thoáng qua
+      let off: () => void = () => {};
+      let cancelled = false;
+      const start = () => {
+        if (!cancelled) off = onAuthStateChanged(auth, (u) => cb(u ? toUser(u) : null));
+      };
+      if (redirectPending) void redirectDone.then(start);
+      else start();
+      return () => {
+        cancelled = true;
+        off();
+      };
     },
     async signIn() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       if (isIOS() || isStandalone()) {
-        await signInWithRedirect(auth, provider);
+        try {
+          sessionStorage.setItem(REDIRECT_KEY, '1');
+        } catch {
+          /* bỏ qua */
+        }
+        await signInWithRedirect(auth, provider, browserPopupRedirectResolver);
       } else {
-        await signInWithPopup(auth, provider);
+        await signInWithPopup(auth, provider, browserPopupRedirectResolver);
       }
     },
     async signOut() {
@@ -218,7 +253,11 @@ export async function createFirebaseBackend(): Promise<Backend> {
     watchDoc(col, id, cb, onError) {
       return onSnapshot(
         doc(db, col, id),
-        (snap) => cb(snap.exists() ? mapDoc(snap.id, snap.data()) : null),
+        (snap) => {
+          // Chưa có mạng: "không tồn tại" lúc này chỉ là chưa biết — chờ máy chủ trả lời
+          if (!snap.exists() && snap.metadata.fromCache) return;
+          cb(snap.exists() ? mapDoc(snap.id, snap.data()) : null);
+        },
         (e) => {
           console.warn('watchDoc', col, id, e);
           if (onError) onError(e);

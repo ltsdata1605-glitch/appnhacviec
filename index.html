@@ -25,12 +25,16 @@
     <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (prefers-color-scheme: dark)" href="/splash/splash-1206x2622-dark.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (prefers-color-scheme: dark)" href="/splash/splash-1179x2556-dark.png" />
     <style>
-      html, body { background: #f2f2f7; }
+      html, body { background: #f2f2f7; margin: 0; }
       @media (prefers-color-scheme: dark) { html, body { background: #000; } }
+      /* Màn chờ hiện ngay khi trang tải, trùng vị trí với ảnh khởi động của iPhone */
+      #root > .launch { position: fixed; inset: 0; display: grid; place-items: center; background: #f2f2f7; }
+      @media (prefers-color-scheme: dark) { #root > .launch { background: #000; } }
+      #root > .launch .launch-icon { display: block; width: 88px; height: 88px; border-radius: 22.5%; overflow: hidden; }
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="launch" role="progressbar" aria-label="Đang mở Nhắc việc"><span class="launch-icon" aria-hidden="true"><svg width="88" height="88" viewBox="0 0 1024 1024"><defs><linearGradient id="nv-launch-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a91f0"/><stop offset="1" stop-color="#2a83e9"/></linearGradient></defs><rect width="1024" height="1024" fill="url(#nv-launch-g)"/><g transform="translate(512 530) scale(0.86) translate(-512 -546)" fill="#fff"><g class="launch-bell"><circle cx="512" cy="244" r="36"/><path d="M512 258c-116 0-190 94-190 214v126c0 42-20 74-48 102l-18 18c-20 20-7 52 21 52h470c28 0 41-32 21-52l-18-18c-28-28-48-60-48-102V472c0-120-74-214-190-214z"/></g><path class="launch-clapper" d="M442 800h140c0 39-31 70-70 70s-70-31-70-70z"/></g></svg></span><span class="launch-dots" aria-hidden="true"><i></i><i></i><i></i></span></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -3,7 +3,7 @@ import { useSession, useStoreData, useWatch } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
-import { Avatar, Cell, Empty, Group, Img, Pill, Ring, Section, Segmented } from '../../ui/controls';
+import { Avatar, Cell, Empty, Group, Img, Pill, Ring, Section, Segmented, SkeletonList } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { dm, longDate, monthRange, vnAt, vnDate, vnTime } from '../../lib/time';
 import { STATUS_META, todayBoard, personStats, ontimeRate, type AreaToday, type PersonStats } from '../../lib/reports';
@@ -44,6 +44,13 @@ function MyReports() {
   const { from, to } = monthRange(ym);
   const stats = useMemo(() => (store ? personStats([me], d.areas, d.reports, store, d.leaves, from, to).find((x) => x.uid === me.uid) : undefined), [d, store, me, from, to]);
   const recent = d.reports.filter((r) => r.uid === me.uid).sort((a, b) => b.submittedAt - a.submittedAt).slice(0, 10);
+  if (d.loading)
+    return (
+      <>
+        <SkeletonList rows={1} />
+        <SkeletonList rows={2} />
+      </>
+    );
 
   return (
     <>
@@ -207,6 +214,13 @@ function TodayBoard() {
   const store = s.store;
   const board = useMemo(() => (store ? todayBoard(d.areas, d.reports, store, d.leaves) : []), [d, store]);
   if (!store) return null;
+  if (d.loading)
+    return (
+      <>
+        <SkeletonList rows={1} title={false} />
+        <SkeletonList rows={4} title={false} />
+      </>
+    );
 
   const required = board.filter((x) => x.status !== 'none' && x.status !== 'leave');
   const submitted = board.filter((x) => x.report);

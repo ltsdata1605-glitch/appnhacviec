@@ -3,7 +3,7 @@ import { useSession, useStoreData, useWatch } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
-import { Cell, Empty, Group, SearchBar, Section, Segmented, SwipeRow, type SwipeAction } from '../../ui/controls';
+import { Cell, Empty, Group, SearchBar, Section, Segmented, SwipeRow, type SwipeAction, SkeletonList } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { addDays, vnDate } from '../../lib/time';
 import { isActor, isOpen, sortTasks, taskState, targetLabel } from '../../lib/tasks';
@@ -157,7 +157,9 @@ export function TaskListScreen() {
         </Section>
       )}
 
-      {groups.length === 0 ? (
+      {groups.length === 0 && d.loading ? (
+        <SkeletonList rows={4} />
+      ) : groups.length === 0 ? (
         <Empty
           icon={seg === 'done' ? 'checklist' : 'check'}
           title={seg === 'done' ? 'Chưa có việc hoàn tất' : seg === 'review' ? 'Không có việc chờ duyệt' : q ? 'Không tìm thấy' : 'Không có việc cần làm'}

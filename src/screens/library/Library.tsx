@@ -3,7 +3,7 @@ import { useSession, useStoreData } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
-import { Cell, Empty, Group, Pill, SearchBar, Section } from '../../ui/controls';
+import { Cell, Empty, Group, Pill, SearchBar, Section, SkeletonList } from '../../ui/controls';
 import { Icon, type IconName } from '../../ui/Icon';
 import { POST_CATEGORIES } from '../../lib/constants';
 import { CHAIN_LABEL, CRITERIA } from '../../lib/criteria';
@@ -98,6 +98,8 @@ export function LibraryScreen() {
           <Section title="Mới cập nhật">
             {recent.length ? (
               <PostGroup posts={recent} uid={uid} onOpen={(p) => nav.push(<PostDetailScreen id={p.id} />)} />
+            ) : d.loading ? (
+              <SkeletonList rows={3} title={false} />
             ) : (
               <Empty icon="books" title="Chưa có bài viết" text={s.can('library') ? 'Đăng nội quy, chính sách, chương trình triển khai để mọi người tra cứu.' : undefined} />
             )}

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useSession, useStoreData } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
-import { Cell, Empty, Group, Section } from '../../ui/controls';
+import { Cell, Empty, Group, Section, SkeletonList } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { dueLabel, greeting, longDate, vnDate, now } from '../../lib/time';
 import { isActor, isOpen, sortTasks } from '../../lib/tasks';
@@ -40,8 +40,16 @@ export function useMyPendingCount() {
 
 export function MyDaySections({ goTab }: { goTab: (k: string) => void }) {
   const s = useSession();
+  const d = useStoreData();
   const nav = useNav();
   const { me, myAreas, handovers, rollcalls, mine, group, doneToday, acks } = useMyDay();
+  if (d.loading)
+    return (
+      <>
+        <SkeletonList rows={1} />
+        <SkeletonList rows={3} />
+      </>
+    );
 
   return (
     <>

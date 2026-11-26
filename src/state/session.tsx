@@ -18,6 +18,39 @@ export interface Session {
 
 const Ctx = createContext<Session | null>(null);
 
+// Lưu tạm hồ sơ, quyền Admin và thông tin kho trên máy: mở app hiện giao diện ngay,
+// dữ liệu thật từ máy chủ về sau sẽ tự cập nhật (thường dưới 1 giây).
+interface SessionCache {
+  profile: UserProfile | null;
+  isAdmin: boolean;
+  store: Store | null;
+}
+const cacheKey = (uid: string) => `nv-session-${uid}`;
+function readCache(uid: string): SessionCache | null {
+  try {
+    const raw = localStorage.getItem(cacheKey(uid));
+    return raw ? (JSON.parse(raw) as SessionCache) : null;
+  } catch {
+    return null;
+  }
+}
+function writeCache(uid: string, c: SessionCache) {
+  try {
+    localStorage.setItem(cacheKey(uid), JSON.stringify(c));
+  } catch {
+    /* bỏ qua */
+  }
+}
+function clearCaches() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('nv-session-'))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* bỏ qua */
+  }
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -33,17 +66,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(
-    () =>
-      api().onAuth((u) => {
-        setAuth(u);
-        setAuthReady(true);
+  useEffect(() => {
+    let had = false;
+    return api().onAuth((u) => {
+      const cached = u ? readCache(u.uid) : null;
+      if (!u && had) clearCaches(); // đăng xuất: xoá hồ sơ lưu tạm trên máy
+      had = !!u;
+      setAuth(u);
+      setAuthReady(true);
+      setViewStore(null);
+      if (cached?.profile) {
+        setProfile(cached.profile);
+        setIsAdmin(cached.isAdmin);
+        setStore(cached.store);
+        setProfileLoaded(true);
+      } else {
         setProfileLoaded(false);
         setProfile(null);
-        setViewStore(null);
-      }),
-    [],
-  );
+      }
+    });
+  }, []);
 
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -84,8 +126,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setStore(null);
       return;
     }
-    return api().watchDoc<Store>('stores', storeCode, setStore);
+    // Giữ thông tin kho lưu tạm (nếu đúng kho) trong lúc chờ máy chủ
+    setStore((cur) => (cur?.code === storeCode ? cur : null));
+    return api().watchDoc<Store>('stores', storeCode, (x) => x && setStore(x));
   }, [storeCode]);
+
+  // Ghi lại bản lưu tạm khi dữ liệu từ máy chủ thay đổi
+  useEffect(() => {
+    if (!auth || !profileLoaded) return;
+    writeCache(auth.uid, { profile, isAdmin, store: store && profile && store.code === profile.storeCode ? store : null });
+  }, [auth, profile, profileLoaded, isAdmin, store]);
 
   const value = useMemo<Session>(() => {
     const viewingOther = isAdmin && !!viewStore && viewStore !== profile?.storeCode;
@@ -224,7 +274,14 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       posts: posts.data,
       rollcalls: rollcalls.data,
       notifications: notifications.data.sort((a, b) => b.createdAt - a.createdAt),
-      loading: members.loading || areas.loading,
+      // Đang tải lần đầu: hiện khung chờ thay cho "không có dữ liệu"
+      loading:
+        members.loading ||
+        areas.loading ||
+        (s.isManager ? allTasks.loading : sharedTasks.loading || myTasks.loading) ||
+        (reviewer ? allReports.loading : myReports.loading) ||
+        posts.loading ||
+        rollcalls.loading,
       byUid: (id) => (id ? map.get(id) : undefined),
       nameOf: (id) => (id ? map.get(id)?.fullName || 'Không rõ' : ''),
     };

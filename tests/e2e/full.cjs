@@ -721,6 +721,22 @@ async function main() {
     check(`${k}: đăng nhập và lưu dữ liệu không cần ghi IndexedDB`, bad.length === 0, bad.slice(0, 3).join(', '));
   }
 
+  sec('11. Mở app');
+  for (const [k, page, home] of [
+    ['Nhân viên', C, 'Hôm nay'],
+    ['Quản lý', A, 'Tổng quan'],
+  ]) {
+    const t0 = Date.now();
+    await page.reload();
+    await page.locator('nav.tabbar button', { hasText: home }).waitFor({ timeout: 10000 });
+    const ms = Date.now() - t0;
+    const login = await page.getByText('Đăng nhập với Google').isVisible().catch(() => false);
+    check(`${k} mở lại app vào thẳng giao diện, không qua màn đăng nhập (${ms} ms)`, ms < 3000 && !login);
+    await page.locator('.launch').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+    check(`${k}: màn khởi động tự biến mất`, (await page.locator('.launch').count()) === 0);
+  }
+  check('Dữ liệu tải xong sau khi mở lại', (await has(C, 'Báo cáo 8NTTT', 10000)) && (await has(A, 'Chờ bạn xử lý', 10000)));
+
   await browser.close();
 
   // ---------------- Tổng kết ----------------

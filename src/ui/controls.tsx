@@ -388,3 +388,44 @@ export function Loading() {
     </div>
   );
 }
+
+// ---------- Khung chờ khi dữ liệu đang tải lần đầu ----------
+export function SkeletonList({ rows = 3, title = true }: { rows?: number; title?: boolean }) {
+  return (
+    <section className="section sk-section" aria-busy="true" aria-label="Đang tải">
+      {title && <span className="skeleton sk-title" />}
+      <div className="sk-list">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="sk-card">
+            <span className="skeleton sk-icon" />
+            <div className="sk-lines">
+              <span className="skeleton sk-line" style={{ width: `${72 - i * 13}%` }} />
+              <span className="skeleton sk-line short" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function SkeletonStats() {
+  return (
+    <section className="section" aria-busy="true" aria-label="Đang tải">
+      <div className="stat-grid">
+        {[0, 1].map((i) => (
+          <div key={i} className="stat sk-stat">
+            <span className="skeleton sk-line" style={{ width: '62%' }} />
+            <div className="row gap12" style={{ marginTop: 14 }}>
+              <span className="skeleton sk-ring" />
+              <div className="sk-lines grow">
+                <span className="skeleton sk-line" style={{ width: '50%', height: 16 }} />
+                <span className="skeleton sk-line short" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}

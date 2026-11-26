@@ -3,7 +3,7 @@ import { useSession, useStoreData } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
-import { Avatar, Cell, Empty, Group, Pill, SearchBar, Section } from '../../ui/controls';
+import { Avatar, Cell, Empty, Group, Pill, SearchBar, Section, SkeletonList } from '../../ui/controls';
 import { ROLE_LABEL } from '../../lib/constants';
 import { matches } from '../../lib/text';
 import { dm, relative } from '../../lib/time';
@@ -177,6 +177,8 @@ export function PeopleScreen() {
             </Group>
           </Section>
         ))
+      ) : d.loading ? (
+        <SkeletonList rows={4} />
       ) : (
         <Empty icon="people" title={q ? 'Không tìm thấy' : 'Chưa có nhân viên'} text={q ? undefined : 'Nhân viên đăng nhập Google và chọn mã kho này để gửi yêu cầu.'} />
       )}

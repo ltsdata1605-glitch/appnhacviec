@@ -4,7 +4,7 @@ import { SessionProvider, StoreDataProvider, useSession, useStoreData } from './
 import { UIProvider } from './ui/Overlay';
 import { Stack, type StackHandle } from './ui/Nav';
 import { Icon, type IconName } from './ui/Icon';
-import { AppIcon } from './ui/AppIcon';
+import { Launch } from './ui/Launch';
 import { LoginScreen } from './screens/auth/Login';
 import { OnboardingScreen, StatusScreen } from './screens/auth/Onboarding';
 import { TodayScreen } from './screens/home/Today';
@@ -43,7 +43,7 @@ export function App() {
         </div>
       </div>
     );
-  if (!backend) return <Splash />;
+  if (!backend) return <Launch done={false} />;
   return (
     <SessionProvider>
       <UIProvider>
@@ -53,19 +53,21 @@ export function App() {
   );
 }
 
-function Splash() {
+/** Màn khởi động phủ lên trên; nội dung app dựng sẵn bên dưới rồi hiện ra khi đã sẵn sàng */
+function Gate() {
+  const s = useSession();
+  const booting = !s.ready || (!!s.auth && !s.profileLoaded);
   return (
-    <div className="splash">
-      <AppIcon size={88} />
-    </div>
+    <>
+      {!booting && <GateContent />}
+      <Launch done={!booting} />
+    </>
   );
 }
 
-function Gate() {
+function GateContent() {
   const s = useSession();
-  if (!s.ready) return <Splash />;
   if (!s.auth) return <LoginScreen />;
-  if (!s.profileLoaded) return <Splash />;
   const adminView = s.isAdmin && !!s.storeCode;
   if (!s.profile && !adminView) return <OnboardingScreen />;
   if (s.profile && s.profile.status !== 'active' && !adminView) return <StatusScreen />;
@@ -86,6 +88,12 @@ function Main() {
   const manager = s.isManager;
   const [tab, setTab] = useState<TabKey>('home');
   const [depths, setDepths] = useState<Record<string, number>>({});
+  // Hiệu ứng vào app lần đầu (nội dung nổi lên, thanh tab trượt lên)
+  const [entering, setEntering] = useState(true);
+  useEffect(() => {
+    const t = window.setTimeout(() => setEntering(false), 1100);
+    return () => clearTimeout(t);
+  }, []);
   const stacks = useRef<Partial<Record<TabKey, StackHandle | null>>>({});
   // Đổi kho đang xem (Admin) hoặc đổi vai trò: các ngăn điều hướng được tạo lại từ đầu
   useEffect(() => {
@@ -187,7 +195,7 @@ function Main() {
   return (
     <LinkCtx.Provider value={openLink}>
       <NotificationCenter />
-      <div className="app">
+      <div className={`app${entering ? ' entering' : ''}`}>
         <div className="app-frame">
           {tabs.map((t) => (
             <Stack
