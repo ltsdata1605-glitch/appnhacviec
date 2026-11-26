@@ -39,9 +39,10 @@ export function Section({
   );
 }
 
-export function Group({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+/** Nhóm danh sách. cards: mỗi dòng là một thẻ nổi riêng, cách nhau bằng khoảng thở thay cho đường kẻ */
+export function Group({ children, style, cards }: { children: ReactNode; style?: CSSProperties; cards?: boolean }) {
   return (
-    <div className="group" style={style}>
+    <div className={`group${cards ? ' cards' : ''}`} style={style}>
       {children}
     </div>
   );
@@ -80,7 +81,7 @@ export function Cell({ icon, iconColor = 'blue', leading, title, sub, detail, tr
       </div>
       {detail !== undefined && <div className="cell-detail">{detail}</div>}
       {trailing}
-      {chevron && <Icon name="chevronRight" size={17} stroke={2.4} className="chev" />}
+      {chevron && <Icon name="chevronRight" size={16} stroke={2} className="chev" />}
     </>
   );
   const cls = `cell${destructive ? ' destructive' : ''}${centered ? ' center-text' : ''}`;
@@ -96,24 +97,38 @@ export function Cell({ icon, iconColor = 'blue', leading, title, sub, detail, tr
   );
 }
 
-// ---------- Segmented ----------
+// ---------- Bộ lọc dạng viên thuốc (thay cho segmented control) ----------
+export type SegDot = 'red' | 'orange' | 'green' | 'blue';
 export function Segmented<T extends string>({
   value,
   options,
   onChange,
   style,
+  fill,
 }: {
   value: T;
-  options: { value: T; label: string; count?: number }[];
+  options: { value: T; label: string; count?: number; dot?: SegDot | false }[];
   onChange: (v: T) => void;
   style?: CSSProperties;
+  /** các nút chia đều chiều ngang (dùng trong biểu mẫu) */
+  fill?: boolean;
 }) {
-  const idx = Math.max(0, options.findIndex((o) => o.value === value));
+  const ref = useRef<HTMLDivElement>(null);
+  // Đưa mục đang chọn vào tầm nhìn khi dải lọc dài hơn màn hình
+  useEffect(() => {
+    const el = ref.current?.querySelector<HTMLElement>('button.on');
+    const box = ref.current;
+    if (!el || !box || box.scrollWidth <= box.clientWidth) return;
+    const left = el.offsetLeft - 16;
+    const right = el.offsetLeft + el.offsetWidth - box.clientWidth + 16;
+    if (box.scrollLeft > left) box.scrollTo({ left, behavior: 'smooth' });
+    else if (box.scrollLeft < right) box.scrollTo({ left: right, behavior: 'smooth' });
+  }, [value]);
   return (
-    <div className="segmented" role="tablist" style={style}>
-      <div className="seg-thumb" style={{ width: `calc((100% - 4px) / ${options.length})`, transform: `translateX(${idx * 100}%)` }} />
+    <div ref={ref} className={`segmented${fill ? ' fill' : ''}`} role="tablist" style={style}>
       {options.map((o) => (
-        <button key={o.value} role="tab" aria-selected={o.value === value} className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" role="tab" aria-selected={o.value === value} className={o.value === value ? 'on' : ''} onClick={() => onChange(o.value)}>
+          {o.dot && <span className={`seg-dot ${o.dot}`} aria-hidden="true" />}
           {o.label}
           {o.count !== undefined && o.count > 0 && <span className="seg-count">{o.count}</span>}
         </button>

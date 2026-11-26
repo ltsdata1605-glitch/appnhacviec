@@ -84,7 +84,7 @@ export function RollcallListScreen() {
         ) : undefined
       }
       headerExtra={
-        <div style={{ padding: '4px 16px 0' }}>
+        <div className="header-pills">
           <Segmented
             value={seg}
             onChange={setSeg}

@@ -17,7 +17,7 @@ import { TemplatesScreen } from './Templates';
 import type { Task, TaskTemplate } from '../../lib/types';
 
 type StaffSeg = 'mine' | 'shared' | 'done';
-type MgrSeg = 'open' | 'review' | 'done';
+type MgrSeg = 'open' | 'mine' | 'review' | 'done';
 
 export function TaskListScreen() {
   const s = useSession();
@@ -45,6 +45,7 @@ export function TaskListScreen() {
     const uid = me?.uid || '';
     if (manager) {
       return {
+        mine: sortTasks(filtered.filter((t) => me && isActor(t, me) && isOpen(t, uid))),
         open: sortTasks(filtered.filter((t) => t.status === 'open' || t.status === 'returned')),
         review: sortTasks(filtered.filter((t) => t.status === 'pending_review')),
         done: sortTasks(filtered.filter((t) => t.status === 'done')).slice(0, 80),
@@ -113,15 +114,18 @@ export function TaskListScreen() {
       .map(([k, v]) => ({ key: k, title: titles[k], items: v }));
   }, [current, seg]);
 
+  const lateIn = (k: string) => ((lists as unknown as Record<string, Task[] | undefined>)[k] || []).some((t) => taskState(t) === 'overdue');
+  const dotFor = (k: string, n?: number) => (k === seg || !n ? false : lateIn(k) ? ('red' as const) : k === 'review' ? ('orange' as const) : false);
   const options = manager
     ? [
-        { value: 'open' as const, label: 'Đang làm', count: lists.open?.length },
-        { value: 'review' as const, label: 'Chờ duyệt', count: lists.review?.length },
+        { value: 'open' as const, label: 'Đang làm', count: lists.open?.length, dot: dotFor('open', lists.open?.length) },
+        { value: 'mine' as const, label: 'Của tôi', count: lists.mine?.length, dot: dotFor('mine', lists.mine?.length) },
+        { value: 'review' as const, label: 'Chờ duyệt', count: lists.review?.length, dot: dotFor('review', lists.review?.length) },
         { value: 'done' as const, label: 'Đã xong' },
       ]
     : [
-        { value: 'mine' as const, label: 'Của tôi', count: lists.mine?.length },
-        { value: 'shared' as const, label: 'Toàn kho', count: lists.shared?.length },
+        { value: 'mine' as const, label: 'Của tôi', count: lists.mine?.length, dot: dotFor('mine', lists.mine?.length) },
+        { value: 'shared' as const, label: 'Toàn kho', count: lists.shared?.length, dot: dotFor('shared', lists.shared?.length) },
         { value: 'done' as const, label: 'Đã xong' },
       ];
 
@@ -139,9 +143,9 @@ export function TaskListScreen() {
         </>
       }
       headerExtra={
-        <div style={{ padding: '6px 16px 0', display: 'grid', gap: 10 }}>
+        <div className="header-pills" style={{ display: 'grid', gap: 10 }}>
           <SearchBar value={q} onChange={setQ} placeholder="Tìm công việc" />
-          <Segmented value={seg as string} onChange={(v) => setSeg(v as StaffSeg | MgrSeg)} options={options as { value: string; label: string; count?: number }[]} />
+          <Segmented value={seg as string} onChange={(v) => setSeg(v as StaffSeg | MgrSeg)} options={options as { value: string; label: string; count?: number; dot?: 'red' | 'orange' | false }[]} />
         </div>
       }
     >
@@ -162,7 +166,7 @@ export function TaskListScreen() {
       ) : (
         groups.map((g) => (
           <Section key={g.key} title={g.title} small action={`${g.items.length}`}>
-            <Group>
+            <Group cards>
               {g.items.map((t) => (
                 <SwipeRow key={t.id} actions={swipe(t)}>
                   <TaskRow task={t} onOpen={() => open(t)} showTarget={manager || seg !== 'mine' || t.scope !== 'personal'} />

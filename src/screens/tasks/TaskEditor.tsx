@@ -167,6 +167,7 @@ export function TaskEditor({ close, task, template, forceRepeat, presetAssignee 
                 onChange={setScope}
                 options={(['personal', 'department', 'brand', 'store'] as TaskScope[]).map((k) => ({ value: k, label: k === 'store' ? 'Toàn ST' : k === 'brand' ? 'Hãng' : SCOPE_LABEL[k] }))}
                 style={{ marginBottom: 10 }}
+                fill
               />
             )}
             <Group>
@@ -262,7 +263,7 @@ export function TaskEditor({ close, task, template, forceRepeat, presetAssignee 
         </Section>
 
         <Section title="Mức ưu tiên" small>
-          <Segmented value={priority} onChange={setPriority} options={(['normal', 'high', 'urgent'] as Priority[]).map((p) => ({ value: p, label: PRIORITY_LABEL[p] }))} />
+          <Segmented fill value={priority} onChange={setPriority} options={(['normal', 'high', 'urgent'] as Priority[]).map((p) => ({ value: p, label: PRIORITY_LABEL[p], dot: p === 'urgent' ? ('red' as const) : p === 'high' ? ('orange' as const) : false }))} />
         </Section>
 
         <Section title="Checklist" small footer="Chia nhỏ việc thành các bước để nhân viên tích từng mục.">

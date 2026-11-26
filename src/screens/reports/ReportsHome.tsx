@@ -20,8 +20,18 @@ export function ReportsScreen() {
   return s.can('review') ? <ManagerReports /> : <StaffReports />;
 }
 
-// ---------------- Nhân viên ----------------
+// ---------------- Nhân viên (và mục "Của tôi" của Quản lý) ----------------
 function StaffReports() {
+  const s = useSession();
+  const store = s.store;
+  return (
+    <Page title="Báo cáo 8NTTT" kicker={store ? `${longDate()} · Hạn ${store.deadline}` : undefined} right={<NavActions />}>
+      <MyReports />
+    </Page>
+  );
+}
+
+function MyReports() {
   const s = useSession();
   const d = useStoreData();
   const nav = useNav();
@@ -33,10 +43,10 @@ function StaffReports() {
   const ym = vnDate().slice(0, 7);
   const { from, to } = monthRange(ym);
   const stats = useMemo(() => (store ? personStats([me], d.areas, d.reports, store, d.leaves, from, to).find((x) => x.uid === me.uid) : undefined), [d, store, me, from, to]);
-  const recent = [...d.reports].sort((a, b) => b.submittedAt - a.submittedAt).slice(0, 10);
+  const recent = d.reports.filter((r) => r.uid === me.uid).sort((a, b) => b.submittedAt - a.submittedAt).slice(0, 10);
 
   return (
-    <Page title="Báo cáo 8NTTT" kicker={store ? `${longDate()} · Hạn ${store.deadline}` : undefined} right={<NavActions />}>
+    <>
       <Section title="Hôm nay">
         {mine.length ? (
           <div style={{ display: 'grid', gap: 12 }}>
@@ -82,7 +92,7 @@ function StaffReports() {
           </Group>
         </Section>
       )}
-    </Page>
+    </>
   );
 }
 
@@ -146,8 +156,14 @@ type Filter = 'all' | 'todo' | 'review' | 'fail';
 
 function ManagerReports() {
   const s = useSession();
-  const [tab, setTab] = useState<'today' | 'stats'>('today');
+  const d = useStoreData();
+  const [tab, setTab] = useState<'today' | 'mine' | 'stats'>('today');
   const nav = useNav();
+  const canMine = !!s.profile && s.profile.status === 'active' && s.profile.storeCode === s.storeCode;
+  const myLeft = useMemo(
+    () => (canMine && s.store ? todayBoard(d.areas, d.reports, s.store, d.leaves).filter((x) => x.responsible === s.profile!.uid && (x.status === 'pending' || x.status === 'overdue')).length : 0),
+    [canMine, d, s.store, s.profile],
+  );
   return (
     <Page
       title="Báo cáo 8NTTT"
@@ -163,19 +179,20 @@ function ManagerReports() {
         </>
       }
       headerExtra={
-        <div style={{ padding: '6px 16px 2px' }}>
+        <div className="header-pills">
           <Segmented
             value={tab}
             onChange={setTab}
             options={[
               { value: 'today', label: 'Hôm nay' },
+              ...(canMine ? [{ value: 'mine' as const, label: 'Của tôi', count: myLeft, dot: myLeft > 0 && tab !== 'mine' ? ('orange' as const) : (false as const) }] : []),
               { value: 'stats', label: 'Thống kê' },
             ]}
           />
         </div>
       }
     >
-      {tab === 'today' ? <TodayBoard /> : <StatsBoard />}
+      {tab === 'today' ? <TodayBoard /> : tab === 'mine' && canMine ? <MyReports /> : <StatsBoard />}
     </Page>
   );
 }
@@ -273,7 +290,7 @@ function TodayBoard() {
 
       <Section style={{ paddingTop: 12 }}>
         {list.length ? (
-          <Group>
+          <Group cards>
             {list.map((x) => {
               const meta = STATUS_META[x.status];
               const rv = x.report?.review?.result;

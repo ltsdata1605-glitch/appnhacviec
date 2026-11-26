@@ -118,9 +118,9 @@ function Main() {
     b.tasks = mine.length + (manager ? d.tasks.filter((t) => t.status === 'pending_review').length : 0);
     if (s.store) {
       const board = todayBoard(d.areas, d.reports, s.store, d.leaves);
-      b.reports = manager
-        ? board.filter((x) => x.report && !x.report.review).length
-        : board.filter((x) => x.responsible === me.uid && (x.status === 'pending' || x.status === 'overdue')).length;
+      const mine = board.filter((x) => x.responsible === me.uid && (x.status === 'pending' || x.status === 'overdue')).length;
+      // Quản lý: báo cáo chờ chấm + khu vực của chính mình chưa chụp
+      b.reports = manager ? board.filter((x) => x.report && !x.report.review && x.report.uid !== me.uid).length + mine : mine;
     }
     b.library = d.posts.filter((p) => p.requireAck && (!p.acks?.[me.uid] || p.acks[me.uid].v < p.version)).length;
     b.home = d.rollcalls.filter((r) => !r.closed && me && !r.progress?.[me.uid]?.doneAt && (r.audience.type === 'all' || (r.audience.type === 'department' && r.audience.value === me.department) || (r.audience.type === 'brand' && me.role === 'pg' && r.audience.value === me.brand) || (r.audience.type === 'role' && r.audience.value === me.role) || (r.audience.type === 'people' && (r.audience.uids || []).includes(me.uid)))).length || undefined;
@@ -200,7 +200,9 @@ function Main() {
               onDepth={(n) => setDepths((x) => ({ ...x, [t.key]: n }))}
             />
           ))}
-          <nav className={`tabbar${hideTabBar ? ' hidden' : ''}`} aria-label="Thanh chính">
+          <nav className={`tabbar${hideTabBar ? ' hidden' : ''}`} aria-label="Thanh chính" style={{ ['--tabs' as string]: tabs.length }}>
+            {/* Viên kính trượt theo tab đang chọn */}
+            <span className="tab-glow" aria-hidden="true" style={{ transform: `translateX(${Math.max(0, tabs.findIndex((t) => t.key === tab)) * 100}%)` }} />
             {tabs.map((t) => (
               <button
                 key={t.key}
@@ -211,7 +213,7 @@ function Main() {
                 }}
                 aria-current={tab === t.key ? 'page' : undefined}
               >
-                <Icon name={t.icon} size={26} stroke={1.9} day={today} />
+                <Icon name={t.icon} size={25} stroke={tab === t.key ? 2.1 : 1.75} day={today} />
                 <span>{t.label}</span>
                 {!!badges[t.key] && <span className="badge">{badges[t.key]! > 99 ? '99+' : badges[t.key]}</span>}
               </button>

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles/app.css';
+import './styles/glass.css';
 import { App } from './App';
 
 // Luôn mở app trên cùng tên miền với trang đăng nhập Google (authDomain).

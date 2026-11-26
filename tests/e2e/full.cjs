@@ -292,6 +292,13 @@ async function main() {
   await sheet(A).locator('.cell', { hasText: 'Phạm Thu Hà' }).click();
   await A.waitForTimeout(800);
   await back(A);
+  // Quản lý cũng phụ trách và tự chụp báo cáo một khu vực
+  await cell(A, 'Bãi xe');
+  await cell(A, 'Người phụ trách');
+  await sheet(A).locator('.cell', { hasText: 'Lê Trường Sơn' }).click();
+  await A.waitForTimeout(800);
+  check('Giao khu vực Bãi xe cho chính Quản lý', await has(A, 'Lê Trường Sơn'));
+  await back(A);
   await back(A);
 
   // =====================================================================
@@ -435,7 +442,21 @@ async function main() {
   await tap(A, '.segmented button', 'Thống kê');
   check('Thống kê tháng hiển thị theo nhân viên', (await has(A, 'Theo nhân viên')) && (await has(A, 'Nguyễn Thị Hoa')));
   await shot(A, 'admin-stats');
+  await tap(A, '.segmented button', 'Của tôi');
+  check('Quản lý có mục "Của tôi" trong Báo cáo, thấy khu vực mình phụ trách', (await has(A, 'Bãi xe')) && (await has(A, 'Chụp báo cáo')));
+  await tap(A, '.btn', 'Chụp báo cáo');
+  await captureAndSend(A);
+  check('Quản lý tự chụp và gửi báo cáo 8NTTT như nhân viên', await has(A, 'Chờ quản lý chấm', 8000));
+  const aUid = (await fsQuery('users', 'email', 'admin.son@test.vn'))[0].name.split('/').pop();
+  const mRep = (await fsQuery('reports', 'areaName', 'Bãi xe'))[0];
+  check('Báo cáo của Quản lý được lưu đúng người gửi', !!mRep && mRep.fields.uid.stringValue === aUid);
   await tap(A, '.segmented button', 'Hôm nay');
+  await tab(A, 'Tổng quan');
+  await tap(A, '.segmented button', 'Của tôi');
+  check('Tổng quan của Quản lý có mục "Của tôi" (việc riêng, báo cáo của mình)', (await has(A, 'Việc của tôi')) && (await has(A, 'Bãi xe')));
+  await tap(A, '.segmented button', 'Toàn kho');
+  await tab(A, 'Công việc');
+  check('Công việc của Quản lý có mục "Của tôi"', (await vis(A, '.segmented button', 'Của tôi').count()) > 0);
 
   // =====================================================================
   sec('5. Thư viện siêu thị');

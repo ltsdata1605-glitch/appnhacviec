@@ -61,7 +61,7 @@ export function NavActions() {
           ui.sheet((close) => <ProfileSheet close={close} />);
         }}
       >
-        <Avatar name={s.profile?.fullName || s.auth?.displayName || '?'} src={s.profile?.photoURL || s.auth?.photoURL} size={44} />
+        <Avatar name={s.profile?.fullName || s.auth?.displayName || '?'} src={s.profile?.photoURL || s.auth?.photoURL} size={38} />
       </button>
     </>
   );

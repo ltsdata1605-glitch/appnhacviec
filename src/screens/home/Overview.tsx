@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSession, useStoreData } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
-import { Avatar, Cell, Group, Pill, Ring, Section } from '../../ui/controls';
+import { Avatar, Cell, Group, Pill, Ring, Section, Segmented } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { dueLabel, longDate, monthRange, vnDate, now, duration, vnAt } from '../../lib/time';
 import { isOpen, sortTasks, taskState } from '../../lib/tasks';
@@ -17,9 +17,29 @@ import { AreasScreen } from '../people/Areas';
 import { QuickActions } from './QuickActions';
 import { RollcallDetailScreen } from '../rollcall/Rollcall';
 import { inAudience, rollcallDone } from '../../lib/actions';
+import { MyDaySections, useMyPendingCount } from './Today';
+
+/** Quản lý chuyển giữa toàn kho và việc của riêng mình (báo cáo 8NTTT, việc được giao, điểm danh…) */
+function ViewSwitch({ view, setView }: { view: 'store' | 'mine'; setView: (v: 'store' | 'mine') => void }) {
+  const pending = useMyPendingCount();
+  return (
+    <div className="header-pills">
+      <Segmented
+        value={view}
+        onChange={setView}
+        options={[
+          { value: 'store', label: 'Toàn kho' },
+          { value: 'mine', label: 'Của tôi', count: pending, dot: pending > 0 && view !== 'mine' ? 'orange' : false },
+        ]}
+      />
+    </div>
+  );
+}
 
 export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
   const s = useSession();
+  const canMine = !!s.profile && s.profile.status === 'active' && s.profile.storeCode === s.storeCode;
+  const [view, setView] = useState<'store' | 'mine'>('store');
   const d = useStoreData();
   const nav = useNav();
   const ui = useUI();
@@ -66,7 +86,7 @@ export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
   };
 
   return (
-    <Page title="Tổng quan" kicker={`${store?.name || ''} · ${longDate()}`} right={<NavActions />}>
+    <Page title="Tổng quan" kicker={`${store?.name || ''} · ${longDate()}`} right={<NavActions />} headerExtra={canMine ? <ViewSwitch view={view} setView={setView} /> : undefined}>
       {s.isAdmin && s.profile && s.storeCode !== s.profile.storeCode && (
         <Section>
           <div className="notice">
@@ -86,149 +106,155 @@ export function OverviewScreen({ goTab }: { goTab: (k: string) => void }) {
       <PushBanner />
       <QuickActions />
 
-      <Section>
-        <div className="stat-grid">
-          <button className="stat" onClick={() => goTab('reports')}>
-            <div className="stat-label">
-              <Icon name="camera" size={17} className="c-green" />
-              8NTTT hôm nay
-            </div>
-            <div className="row gap12" style={{ marginTop: 10 }}>
-              <Ring value={submitted.length} total={required.length || 1} size={54} width={7}>
-                <span className="t-cap semibold tnum">{required.length ? Math.round((submitted.length / required.length) * 100) : 0}%</span>
-              </Ring>
-              <div>
-                <div className="t-title2 tnum">
-                  {submitted.length}
-                  <span className="t-sub c2">/{required.length}</span>
+      {canMine && view === 'mine' ? (
+        <MyDaySections goTab={goTab} />
+      ) : (
+        <>
+          <Section>
+            <div className="stat-grid">
+              <button className="stat" onClick={() => goTab('reports')}>
+                <div className="stat-label">
+                  <Icon name="camera" size={17} className="c-green" />
+                  8NTTT hôm nay
                 </div>
-                <div className={`t-foot ${overdueReports.length ? 'c-red semibold' : 'c2'}`}>
-                  {overdueReports.length ? `${overdueReports.length} quá giờ` : deadlineLeft > 3600000 ? `Hạn ${store?.deadline}` : deadlineLeft > 0 ? `Còn ${duration(deadlineLeft)}` : 'Đã qua hạn'}
-                </div>
-              </div>
-            </div>
-          </button>
-          <button className="stat" onClick={() => goTab('tasks')}>
-            <div className="stat-label">
-              <Icon name="checklist" size={17} className="tint" />
-              Việc hôm nay
-            </div>
-            <div className="row gap12" style={{ marginTop: 10 }}>
-              <Ring value={todayDone} total={todayTasks.length || 1} size={54} width={7} color="var(--tint)">
-                <span className="t-cap semibold tnum">{todayTasks.length ? Math.round((todayDone / todayTasks.length) * 100) : 0}%</span>
-              </Ring>
-              <div>
-                <div className="t-title2 tnum">
-                  {todayDone}
-                  <span className="t-sub c2">/{todayTasks.length}</span>
-                </div>
-                <div className={`t-foot ${overdueTasks.length ? 'c-red semibold' : 'c2'}`}>{overdueTasks.length ? `${overdueTasks.length} quá hạn` : 'Không quá hạn'}</div>
-              </div>
-            </div>
-          </button>
-        </div>
-      </Section>
-
-      {(pendingCount > 0 || toReview.length > 0 || reviewTasks.length > 0 || unassigned > 0) && (
-        <Section title="Chờ bạn xử lý">
-          <Group>
-            {pendingCount > 0 && <Cell icon="personPlus" iconColor="blue" title="Duyệt nhân sự" sub="Đăng ký mới, chuyển kho, xin nghỉ" detail={pendingCount} chevron onClick={() => goTab('people')} />}
-            {toReview.length > 0 && <Cell icon="photo" iconColor="purple" title="Chấm báo cáo 8NTTT" detail={toReview.length} chevron onClick={() => nav.push(<ReportDetailScreen id={toReview[0].report!.id} />)} />}
-            {reviewTasks.length > 0 && <Cell icon="shieldCheck" iconColor="indigo" title="Duyệt việc đã hoàn tất" detail={reviewTasks.length} chevron onClick={() => nav.push(<TaskDetailScreen id={reviewTasks[0].id} />)} />}
-            {unassigned > 0 && <Cell icon="grid" iconColor="orange" title="Khu vực chưa phân công" detail={unassigned} chevron onClick={() => nav.push(<AreasScreen />)} />}
-          </Group>
-        </Section>
-      )}
-
-      {waiting.length > 0 && (
-        <Section title={overdueReports.length ? 'Quá giờ chưa báo cáo' : 'Chưa báo cáo'} action="Nhắc tất cả" onAction={nudgeAll}>
-          <Group>
-            {waiting.map((x) => {
-              const p = d.byUid(x.responsible);
-              return (
-                <Cell
-                  key={x.area.id}
-                  leading={<Avatar name={p?.fullName || '?'} src={p?.photoURL} size={38} />}
-                  sepInset={66}
-                  title={p?.fullName || 'Chưa rõ'}
-                  sub={x.area.name}
-                  trailing={<Pill sm color={x.status === 'overdue' ? 'red' : 'blue'}>{x.status === 'overdue' ? 'Quá giờ' : 'Chưa nộp'}</Pill>}
-                  onClick={async () => {
-                    const v = await ui.actions([{ label: `Nhắc ${p?.fullName}`, value: 'n', icon: 'bell' }], x.area.name);
-                    if (v && store) {
-                      await notify([x.responsible!], store.code, actor, { title: 'Nhắc báo cáo 8NTTT', body: `Khu vực ${x.area.name} chưa có báo cáo hôm nay.`, link: 'reports', level: 'high' });
-                      ui.toast({ text: 'Đã gửi nhắc', icon: 'bell', color: 'orange' });
-                    }
-                  }}
-                />
-              );
-            })}
-          </Group>
-        </Section>
-      )}
-
-      {openHandovers.length > 0 && (
-        <Section title="Bàn giao chưa xử lý" action={`${openHandovers.length}`}>
-          <Group>
-            {openHandovers.slice(0, 6).map((t) => (
-              <TaskRow key={t.id} task={t} onOpen={() => nav.push(<TaskDetailScreen id={t.id} />)} />
-            ))}
-          </Group>
-        </Section>
-      )}
-
-      {openRollcalls.length > 0 && (
-        <Section title="Điểm danh đang mở">
-          <Group>
-            {openRollcalls.map(({ r, total, done }) => (
-              <Cell
-                key={r.id}
-                leading={
-                  <Ring value={done} total={total || 1} size={40} width={5} color="var(--indigo)">
-                    <span className="t-cap2 semibold tnum">{done}</span>
+                <div className="row gap12" style={{ marginTop: 10 }}>
+                  <Ring value={submitted.length} total={required.length || 1} size={54} width={7}>
+                    <span className="t-cap semibold tnum">{required.length ? Math.round((submitted.length / required.length) * 100) : 0}%</span>
                   </Ring>
-                }
-                sepInset={68}
-                title={r.title}
-                sub={`${done}/${total} người hoàn tất${r.dueAt ? ` · Hạn ${dueLabel(r.dueAt)}` : ''}`}
-                chevron
-                onClick={() => nav.push(<RollcallDetailScreen id={r.id} />)}
-              />
-            ))}
-          </Group>
-        </Section>
-      )}
+                  <div>
+                    <div className="t-title2 tnum">
+                      {submitted.length}
+                      <span className="t-sub c2">/{required.length}</span>
+                    </div>
+                    <div className={`t-foot ${overdueReports.length ? 'c-red semibold' : 'c2'}`}>
+                      {overdueReports.length ? `${overdueReports.length} quá giờ` : deadlineLeft > 3600000 ? `Hạn ${store?.deadline}` : deadlineLeft > 0 ? `Còn ${duration(deadlineLeft)}` : 'Đã qua hạn'}
+                    </div>
+                  </div>
+                </div>
+              </button>
+              <button className="stat" onClick={() => goTab('tasks')}>
+                <div className="stat-label">
+                  <Icon name="checklist" size={17} className="tint" />
+                  Việc hôm nay
+                </div>
+                <div className="row gap12" style={{ marginTop: 10 }}>
+                  <Ring value={todayDone} total={todayTasks.length || 1} size={54} width={7} color="var(--tint)">
+                    <span className="t-cap semibold tnum">{todayTasks.length ? Math.round((todayDone / todayTasks.length) * 100) : 0}%</span>
+                  </Ring>
+                  <div>
+                    <div className="t-title2 tnum">
+                      {todayDone}
+                      <span className="t-sub c2">/{todayTasks.length}</span>
+                    </div>
+                    <div className={`t-foot ${overdueTasks.length ? 'c-red semibold' : 'c2'}`}>{overdueTasks.length ? `${overdueTasks.length} quá hạn` : 'Không quá hạn'}</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </Section>
 
-      {overdueTasks.length > 0 && (
-        <Section title="Việc quá hạn" action={`${overdueTasks.length}`}>
-          <Group>
-            {overdueTasks.slice(0, 6).map((t) => (
-              <TaskRow key={t.id} task={t} onOpen={() => nav.push(<TaskDetailScreen id={t.id} />)} />
-            ))}
-          </Group>
-        </Section>
-      )}
+          {(pendingCount > 0 || toReview.length > 0 || reviewTasks.length > 0 || unassigned > 0) && (
+            <Section title="Chờ bạn xử lý">
+              <Group cards>
+                {pendingCount > 0 && <Cell icon="personPlus" iconColor="blue" title="Duyệt nhân sự" sub="Đăng ký mới, chuyển kho, xin nghỉ" detail={pendingCount} chevron onClick={() => goTab('people')} />}
+                {toReview.length > 0 && <Cell icon="photo" iconColor="purple" title="Chấm báo cáo 8NTTT" detail={toReview.length} chevron onClick={() => nav.push(<ReportDetailScreen id={toReview[0].report!.id} />)} />}
+                {reviewTasks.length > 0 && <Cell icon="shieldCheck" iconColor="indigo" title="Duyệt việc đã hoàn tất" detail={reviewTasks.length} chevron onClick={() => nav.push(<TaskDetailScreen id={reviewTasks[0].id} />)} />}
+                {unassigned > 0 && <Cell icon="grid" iconColor="orange" title="Khu vực chưa phân công" detail={unassigned} chevron onClick={() => nav.push(<AreasScreen />)} />}
+              </Group>
+            </Section>
+          )}
 
-      {monthStats.length > 0 && (
-        <Section title="Thiếu báo cáo tháng này" footer="Số ngày không báo cáo 8NTTT, không tính ngày nghỉ đã duyệt.">
-          <Group>
-            {monthStats.map((x) => {
-              const p = d.byUid(x.uid);
-              return (
-                <Cell
-                  key={x.uid}
-                  leading={<Avatar name={p?.fullName || '?'} src={p?.photoURL} size={38} />}
-                  sepInset={66}
-                  title={p?.fullName || ''}
-                  sub={x.streak > 1 ? `${x.streak} ngày liên tiếp gần đây` : `Đúng giờ ${x.ontime} · Trễ ${x.late}`}
-                  trailing={<Pill sm color="red">{x.missingDays} ngày</Pill>}
-                  chevron
-                  onClick={() => nav.push(<PersonReportsScreen uid={x.uid} ym={today.slice(0, 7)} />)}
-                />
-              );
-            })}
-          </Group>
-        </Section>
+          {waiting.length > 0 && (
+            <Section title={overdueReports.length ? 'Quá giờ chưa báo cáo' : 'Chưa báo cáo'} action="Nhắc tất cả" onAction={nudgeAll}>
+              <Group cards>
+                {waiting.map((x) => {
+                  const p = d.byUid(x.responsible);
+                  return (
+                    <Cell
+                      key={x.area.id}
+                      leading={<Avatar name={p?.fullName || '?'} src={p?.photoURL} size={38} />}
+                      sepInset={66}
+                      title={p?.fullName || 'Chưa rõ'}
+                      sub={x.area.name}
+                      trailing={<Pill sm color={x.status === 'overdue' ? 'red' : 'blue'}>{x.status === 'overdue' ? 'Quá giờ' : 'Chưa nộp'}</Pill>}
+                      onClick={async () => {
+                        const v = await ui.actions([{ label: `Nhắc ${p?.fullName}`, value: 'n', icon: 'bell' }], x.area.name);
+                        if (v && store) {
+                          await notify([x.responsible!], store.code, actor, { title: 'Nhắc báo cáo 8NTTT', body: `Khu vực ${x.area.name} chưa có báo cáo hôm nay.`, link: 'reports', level: 'high' });
+                          ui.toast({ text: 'Đã gửi nhắc', icon: 'bell', color: 'orange' });
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </Group>
+            </Section>
+          )}
+
+          {openHandovers.length > 0 && (
+            <Section title="Bàn giao chưa xử lý" action={`${openHandovers.length}`}>
+              <Group cards>
+                {openHandovers.slice(0, 6).map((t) => (
+                  <TaskRow key={t.id} task={t} onOpen={() => nav.push(<TaskDetailScreen id={t.id} />)} />
+                ))}
+              </Group>
+            </Section>
+          )}
+
+          {openRollcalls.length > 0 && (
+            <Section title="Điểm danh đang mở">
+              <Group cards>
+                {openRollcalls.map(({ r, total, done }) => (
+                  <Cell
+                    key={r.id}
+                    leading={
+                      <Ring value={done} total={total || 1} size={40} width={5} color="var(--indigo)">
+                        <span className="t-cap2 semibold tnum">{done}</span>
+                      </Ring>
+                    }
+                    sepInset={68}
+                    title={r.title}
+                    sub={`${done}/${total} người hoàn tất${r.dueAt ? ` · Hạn ${dueLabel(r.dueAt)}` : ''}`}
+                    chevron
+                    onClick={() => nav.push(<RollcallDetailScreen id={r.id} />)}
+                  />
+                ))}
+              </Group>
+            </Section>
+          )}
+
+          {overdueTasks.length > 0 && (
+            <Section title="Việc quá hạn" action={`${overdueTasks.length}`}>
+              <Group cards>
+                {overdueTasks.slice(0, 6).map((t) => (
+                  <TaskRow key={t.id} task={t} onOpen={() => nav.push(<TaskDetailScreen id={t.id} />)} />
+                ))}
+              </Group>
+            </Section>
+          )}
+
+          {monthStats.length > 0 && (
+            <Section title="Thiếu báo cáo tháng này" footer="Số ngày không báo cáo 8NTTT, không tính ngày nghỉ đã duyệt.">
+              <Group cards>
+                {monthStats.map((x) => {
+                  const p = d.byUid(x.uid);
+                  return (
+                    <Cell
+                      key={x.uid}
+                      leading={<Avatar name={p?.fullName || '?'} src={p?.photoURL} size={38} />}
+                      sepInset={66}
+                      title={p?.fullName || ''}
+                      sub={x.streak > 1 ? `${x.streak} ngày liên tiếp gần đây` : `Đúng giờ ${x.ontime} · Trễ ${x.late}`}
+                      trailing={<Pill sm color="red">{x.missingDays} ngày</Pill>}
+                      chevron
+                      onClick={() => nav.push(<PersonReportsScreen uid={x.uid} ym={today.slice(0, 7)} />)}
+                    />
+                  );
+                })}
+              </Group>
+            </Section>
+          )}
+        </>
       )}
     </Page>
   );

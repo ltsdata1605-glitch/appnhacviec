@@ -58,7 +58,7 @@ export function CashHistoryScreen() {
       title="Lịch sử kiểm quỹ"
       large={false}
       headerExtra={
-        <div style={{ padding: '4px 16px 0', display: 'grid', gap: 10 }}>
+        <div className="header-pills">
           {viewAll && (
             <Segmented
               value={scope}
