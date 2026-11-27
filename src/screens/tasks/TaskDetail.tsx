@@ -8,7 +8,7 @@ import { Icon } from '../../ui/Icon';
 import { dueLabel, friendly, stamp } from '../../lib/time';
 import { TASK_STATE_META, actorsOf, isActor, myDone, taskState, targetLabel } from '../../lib/tasks';
 import { PRIORITY_LABEL } from '../../lib/constants';
-import { api } from '../../lib/backend';
+import { uploadShots } from '../../lib/photos';
 import { approveTask, commentTask, completeTask, deleteTask, markSeen, nudgeTask, reopenTask, returnTask, toggleChecklist } from '../../lib/actions';
 import { useActor } from '../shared';
 import { useProofCamera } from '../reports/Capture';
@@ -80,18 +80,7 @@ export function TaskDetailScreen({ id }: { id: string }) {
       if (!shots?.length) return;
       setBusy(true);
       try {
-        const photos: Photo[] = [];
-        for (let i = 0; i < shots.length; i++) {
-          const base = `tasks/${t.storeCode}/${t.id}/${actor.uid}/${shots[i].capturedAt}_${i}`;
-          photos.push({
-            url: await api().upload(`${base}.jpg`, shots[i].blob, 'image/jpeg'),
-            thumbUrl: await api().upload(`${base}_t.jpg`, shots[i].thumb, 'image/jpeg'),
-            path: `${base}.jpg`,
-            thumbPath: `${base}_t.jpg`,
-            capturedAt: shots[i].capturedAt,
-            hash: shots[i].hash,
-          });
-        }
+        const photos = await uploadShots(shots, (sh, i) => `tasks/${t.storeCode}/${t.id}/${actor.uid}/${sh.capturedAt}_${i}`);
         await finish(photos);
       } catch {
         ui.alert({ title: 'Chưa gửi được ảnh', message: 'Kiểm tra kết nối mạng rồi thử lại.' });

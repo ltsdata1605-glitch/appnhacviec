@@ -8,6 +8,7 @@ export interface Shot {
   hash: string;
   w: number;
   h: number;
+  quality?: number; // mức nén JPEG đã chọn
 }
 
 export interface StampInfo {
@@ -18,8 +19,22 @@ export interface StampInfo {
   geo?: string; // "Cách siêu thị 35 m"
 }
 
-const MAX_EDGE = 1600;
+// Giữ nguyên độ phân giải camera (1920×1440). Đo trên 6 ảnh siêu thị thật (kệ hàng, quầy, kho):
+// so với cách cũ (thu về 1600px, nén cố định 82%), ảnh mới nét hơn hoặc bằng (SSIM) mà nhẹ hơn.
+const MAX_EDGE = 1920;
 const THUMB_EDGE = 480;
+/** Mức nén theo độ phức tạp ảnh (số byte/điểm ảnh khi nén thử ở 70%): ảnh đơn giản cần mức cao hơn để
+ *  mảng màu trơn không bị vỡ khối; ảnh nhiều chi tiết (kệ hàng dày) giữ chi tiết tốt ở mức thấp hơn. */
+const Q_CURVE: [number, number][] = [
+  [0.05, 0.74],
+  [0.09, 0.7],
+  [0.15, 0.66],
+  [0.19, 0.58],
+];
+const PROBE_Q = 0.7;
+const Q_MIN = 0.56;
+/** Trần dung lượng: ~445 KB cho ảnh 1920×1440 — ảnh quá nhiều chi tiết được nén thêm (không dưới Q_MIN) */
+const MAX_BPP = 0.16;
 
 function toBlob(canvas: HTMLCanvasElement, q = 0.82): Promise<Blob> {
   return new Promise((resolve, reject) =>
@@ -30,6 +45,67 @@ function toBlob(canvas: HTMLCanvasElement, q = 0.82): Promise<Blob> {
 function scaled(srcW: number, srcH: number, max: number) {
   const k = Math.min(1, max / Math.max(srcW, srcH));
   return { w: Math.round(srcW * k), h: Math.round(srcH * k) };
+}
+
+function makeCanvas(w: number, h: number) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  return { c, ctx };
+}
+
+/** Thu nhỏ chất lượng cao: giảm từng nửa khi ảnh gốc lớn hơn nhiều lần, tránh răng cưa và mất chi tiết. */
+export function resample(src: CanvasImageSource, sw: number, sh: number, w: number, h: number): HTMLCanvasElement {
+  let cur: CanvasImageSource = src;
+  let cw = sw;
+  let ch = sh;
+  while (cw / 2 >= w * 1.05 && ch / 2 >= h * 1.05) {
+    const nw = Math.round(cw / 2);
+    const nh = Math.round(ch / 2);
+    const { c, ctx } = makeCanvas(nw, nh);
+    ctx.drawImage(cur, 0, 0, nw, nh);
+    cur = c;
+    cw = nw;
+    ch = nh;
+  }
+  const { c, ctx } = makeCanvas(w, h);
+  ctx.drawImage(cur, 0, 0, w, h);
+  return c;
+}
+
+/** Nội suy tuyến tính trên đường cong mức nén */
+export function qualityFor(bpp: number): number {
+  if (bpp <= Q_CURVE[0][0]) return Q_CURVE[0][1];
+  for (let i = 1; i < Q_CURVE.length; i++) {
+    const [x1, y1] = Q_CURVE[i];
+    if (bpp <= x1) {
+      const [x0, y0] = Q_CURVE[i - 1];
+      return Math.round((y0 + ((bpp - x0) / (x1 - x0)) * (y1 - y0)) * 100) / 100;
+    }
+  }
+  return Q_CURVE[Q_CURVE.length - 1][1];
+}
+
+/**
+ * Nén JPEG theo nội dung ảnh: nén thử ở 70% để đo độ phức tạp, chọn mức nén phù hợp,
+ * rồi chặn trần dung lượng. Thường chỉ 2 lần nén (~0,1 giây).
+ */
+export async function encodeSmart(canvas: HTMLCanvasElement): Promise<{ blob: Blob; quality: number }> {
+  const px = canvas.width * canvas.height;
+  const probe = await toBlob(canvas, PROBE_Q);
+  const q = qualityFor(probe.size / px);
+  let out = { blob: probe, quality: PROBE_Q };
+  if (Math.abs(q - PROBE_Q) >= 0.01) out = { blob: await toBlob(canvas, q), quality: q };
+  if (out.blob.size > px * MAX_BPP && out.quality > Q_MIN) out = { blob: await toBlob(canvas, Q_MIN), quality: Q_MIN };
+  return out;
+}
+
+async function thumbOf(canvas: HTMLCanvasElement): Promise<Blob> {
+  const t = scaled(canvas.width, canvas.height, THUMB_EDGE);
+  return toBlob(resample(canvas, canvas.width, canvas.height, t.w, t.h), 0.7);
 }
 
 /** dHash 16×16 (256 bit) — dùng để phát hiện ảnh trùng lặp gần như tuyệt đối */
@@ -98,38 +174,31 @@ export async function captureFrame(video: HTMLVideoElement, stampInfo: StampInfo
   const vh = video.videoHeight;
   if (!vw || !vh) throw new Error('Camera chưa sẵn sàng');
   const { w, h } = scaled(vw, vh, MAX_EDGE);
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
+  const canvas = resample(video, vw, vh, w, h);
   const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(video, 0, 0, w, h);
   const hash = dhash(canvas); // tính trước khi đóng dấu để dấu thời gian không ảnh hưởng
   drawStamp(ctx, w, h, stampInfo);
-  const blob = await toBlob(canvas, 0.82);
-  const t = scaled(w, h, THUMB_EDGE);
-  const tc = document.createElement('canvas');
-  tc.width = t.w;
-  tc.height = t.h;
-  tc.getContext('2d')!.drawImage(canvas, 0, 0, t.w, t.h);
-  const thumb = await toBlob(tc, 0.7);
-  return { blob, thumb, previewUrl: URL.createObjectURL(blob), capturedAt, hash, w, h };
+  const { blob, quality } = await encodeSmart(canvas);
+  const thumb = await thumbOf(canvas);
+  return { blob, thumb, previewUrl: URL.createObjectURL(blob), capturedAt, hash, w, h, quality };
 }
 
-/** Nén ảnh/tệp đính kèm thường (thư viện, ảnh chuẩn khu vực). */
+/**
+ * Nén ảnh chọn từ máy (thư viện, điểm danh, ảnh chuẩn khu vực): xoay đúng chiều, thu nhỏ chất lượng cao,
+ * nén thích ứng. Ảnh được mã hoá lại nên thông tin EXIF (vị trí GPS, đời máy) bị loại bỏ.
+ */
 export async function compressImageFile(file: File, max = MAX_EDGE): Promise<{ blob: Blob; thumb: Blob }> {
-  const bmp = await createImageBitmap(file);
+  let bmp: ImageBitmap;
+  try {
+    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    bmp = await createImageBitmap(file);
+  }
   const { w, h } = scaled(bmp.width, bmp.height, max);
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  c.getContext('2d')!.drawImage(bmp, 0, 0, w, h);
-  const blob = await toBlob(c, 0.82);
-  const t = scaled(w, h, THUMB_EDGE);
-  const tc = document.createElement('canvas');
-  tc.width = t.w;
-  tc.height = t.h;
-  tc.getContext('2d')!.drawImage(c, 0, 0, t.w, t.h);
-  return { blob, thumb: await toBlob(tc, 0.7) };
+  const c = resample(bmp, bmp.width, bmp.height, w, h);
+  bmp.close?.();
+  const { blob } = await encodeSmart(c);
+  return { blob, thumb: await thumbOf(c) };
 }
 
 // ---------- Ảnh mẫu cho chế độ xem thử ----------

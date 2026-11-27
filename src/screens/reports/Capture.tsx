@@ -8,13 +8,13 @@ import { Check, Group, Section, Cell, Img } from '../../ui/controls';
 import { captureFrame, type Shot } from '../../lib/image';
 import { distanceMeters, formatDistance, geoErrorText, getPosition, type Position } from '../../lib/geo';
 import { now, stamp, vnDate } from '../../lib/time';
-import { api } from '../../lib/backend';
+import { uploadShots } from '../../lib/photos';
 import { notifyMentions, submitReport } from '../../lib/actions';
 import { extractMentions } from '../../lib/mentions';
 import { MentionInput } from '../../ui/Mention';
 import { MAX_PHOTOS } from '../../lib/constants';
 import { useActor } from '../shared';
-import type { Area, Photo, Report } from '../../lib/types';
+import type { Area, Report } from '../../lib/types';
 
 const MAX_AGE_MS = 15 * 60000; // ảnh phải gửi trong 15 phút sau khi chụp
 
@@ -342,15 +342,7 @@ function Compose({
     setBusy(true);
     try {
       const date = vnDate();
-      const photos: Photo[] = [];
-      for (let i = 0; i < shots.length; i++) {
-        const sh = shots[i];
-        const base = `reports/${store.code}/${date}/${area.id}/${actor.uid}/${sh.capturedAt}_${i}`;
-        const url = await api().upload(`${base}.jpg`, sh.blob, 'image/jpeg');
-        const thumbUrl = await api().upload(`${base}_t.jpg`, sh.thumb, 'image/jpeg');
-        photos.push({ url, thumbUrl, path: `${base}.jpg`, thumbPath: `${base}_t.jpg`, capturedAt: sh.capturedAt, hash: sh.hash, w: sh.w, h: sh.h });
-        setProgress(Math.round(((i + 1) / shots.length) * 100));
-      }
+      const photos = await uploadShots(shots, (sh, i) => `reports/${store.code}/${date}/${area.id}/${actor.uid}/${sh.capturedAt}_${i}`, setProgress);
       await submitReport({
         storeCode: store.code,
         area,
