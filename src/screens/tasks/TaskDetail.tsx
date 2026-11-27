@@ -14,7 +14,7 @@ import { useActor } from '../shared';
 import { useProofCamera } from '../reports/Capture';
 import { MentionInput, MentionText } from '../../ui/Mention';
 import { extractMentions } from '../../lib/mentions';
-import { PhotoViewer } from '../reports/ReportDetail';
+import { PhotoViewer } from '../../ui/PhotoViewer';
 import { TaskEditor } from './TaskEditor';
 import type { Activity, Photo, Task } from '../../lib/types';
 
@@ -263,7 +263,12 @@ export function TaskDetailScreen({ id }: { id: string }) {
         </Section>
       )}
 
-      {photos.length > 0 && (
+      {photos.length > 0 && t.photosPurged && (
+        <Section title="Ảnh xác nhận" small>
+          <div className="card t-sub c2">Ảnh đã được tự động xoá theo chính sách lưu trữ.</div>
+        </Section>
+      )}
+      {photos.length > 0 && !t.photosPurged && (
         <Section title="Ảnh xác nhận" small>
           <div className="photo-grid">
             {photos.map((p, i) => (

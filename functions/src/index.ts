@@ -630,6 +630,22 @@ async function purgeOldPhotos(today: string) {
       }
       await doc.ref.update({ photosPurged: true, previousPhotos: FieldValue.delete() });
     }
+    // Ảnh xác nhận hoàn tất công việc: cùng thời hạn lưu với ảnh báo cáo
+    const cutoffMs = Date.parse(`${cutoff}T00:00:00+07:00`);
+    const tasks = await db
+      .collection('tasks')
+      .where('storeCode', '==', sd.id)
+      .where('createdAt', '>=', cutoffMs - 10 * 86400000)
+      .where('createdAt', '<', cutoffMs)
+      .get();
+    for (const doc of tasks.docs) {
+      const photos = (doc.get('photos') || []) as { path?: string; thumbPath?: string }[];
+      if (!photos.length || doc.get('photosPurged')) continue;
+      for (const p of photos) {
+        for (const path of [p.path, p.thumbPath]) if (path) await bucket.file(path).delete({ ignoreNotFound: true }).catch(() => {});
+      }
+      await doc.ref.update({ photosPurged: true });
+    }
   }
 }
 

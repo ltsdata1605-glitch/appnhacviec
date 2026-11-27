@@ -174,6 +174,7 @@ export interface Task {
   completions?: Record<string, number>; // chế độ 'each'
   seenBy?: Record<string, number>;
   photos?: Photo[];
+  photosPurged?: boolean; // ảnh đã tự xoá theo thời hạn lưu trữ
   completedBy?: string | null;
   completedByName?: string | null;
   completedAt?: number | null;

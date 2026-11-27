@@ -957,3 +957,159 @@ body {
     animation: launchFade 0.2s ease forwards;
   }
 }
+
+/* =========================================================
+   Xem ảnh toàn màn hình (phóng to, kéo, vuốt)
+   ========================================================= */
+.pv {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  color: #fff;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.pv-back {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  animation: fadeIn 0.22s ease; /* không giữ trạng thái cuối để độ mờ khi vuốt xuống được áp dụng */
+}
+.pv.closing .pv-back {
+  opacity: 0 !important;
+  transition: opacity 0.22s ease !important;
+}
+.pv-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+.pv-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  display: flex;
+  will-change: transform;
+}
+.pv-slide {
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.pv-box {
+  position: relative;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.pv.opening .pv-box.current {
+  animation: pvIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes pvIn {
+  from {
+    opacity: 0;
+    scale: 0.94;
+  }
+}
+.pv-box img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+/* Ảnh nét hiện dần lên trên ảnh thu nhỏ khi tải xong */
+.pv-full {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.pv-full.on {
+  opacity: 1;
+}
+.pv-spin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -11px 0 0 -11px;
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+}
+.pv-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(var(--safe-top) + 6px) calc(14px + var(--safe-right)) 14px calc(14px + var(--safe-left));
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
+  transition: opacity 0.2s ease;
+}
+.pv-sub {
+  color: rgba(255, 255, 255, 0.72);
+}
+.pv .glass-btn {
+  color: #fff;
+  background: rgba(60, 60, 64, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.pv-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(max(var(--safe-bottom), 12px) + 10px);
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.pv-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.2s, transform 0.3s var(--bounce);
+}
+.pv-dots i.on {
+  background: #fff;
+  transform: scale(1.2);
+}
+.pv.no-chrome .pv-top,
+.pv.no-chrome .pv-dots {
+  opacity: 0;
+  pointer-events: none;
+}
+.pv-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(var(--safe-bottom), 12px) + 40px);
+  z-index: 3;
+  transform: translateX(-50%);
+  max-width: calc(100% - 40px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(40, 40, 44, 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  pointer-events: none;
+  animation: fadeIn 0.3s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv.opening .pv-box.current {
+    animation: none;
+  }
+}

@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useDoc, useSession, useStoreData } from '../../state/session';
 import { useNav } from '../../ui/Nav';
 import { Page } from '../../ui/Page';
 import { useUI } from '../../ui/Overlay';
 import { Avatar, Cell, Empty, Group, Loading, Pill, Section } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
+import { PhotoViewer } from '../../ui/PhotoViewer';
 import { POST_CATEGORIES } from '../../lib/constants';
 import { dmy, friendly } from '../../lib/time';
 import { ackPost, deletePost, notify } from '../../lib/actions';
@@ -19,6 +21,8 @@ export function PostDetailScreen({ id }: { id: string }) {
   const ui = useUI();
   const actor = useActor();
   const { data: p, loading } = useDoc<Post>('posts', id);
+  const [viewer, setViewer] = useState<number | null>(null);
+  const images = (p?.attachments || []).filter((a) => a.type.startsWith('image/'));
   if (loading) return <Page title="Thư viện" large={false}><Loading /></Page>;
   if (!p) return <Page title="Thư viện" large={false}><Empty icon="doc" title="Không tìm thấy bài viết" /></Page>;
 
@@ -98,12 +102,26 @@ export function PostDetailScreen({ id }: { id: string }) {
       {p.attachments.length > 0 && (
         <Section title="Tệp đính kèm" small>
           <Group>
-            {p.attachments.map((a, i) => (
-              <Cell key={i} icon={a.type.startsWith('image/') ? 'photo' : 'doc'} iconColor={a.type.includes('pdf') ? 'red' : 'blue'} title={a.name} sub={a.size ? `${Math.round(a.size / 1024)} KB` : undefined} trailing={<Icon name="arrowUpRight" size={18} className="c3" />} onClick={() => window.open(a.url, '_blank', 'noopener')} />
-            ))}
+            {p.attachments.map((a, i) => {
+              const img = a.type.startsWith('image/');
+              return (
+                <Cell
+                  key={i}
+                  icon={img ? 'photo' : 'doc'}
+                  iconColor={a.type.includes('pdf') ? 'red' : 'blue'}
+                  title={a.name}
+                  sub={a.size ? `${Math.round(a.size / 1024)} KB` : undefined}
+                  trailing={img ? undefined : <Icon name="arrowUpRight" size={18} className="c3" />}
+                  chevron={img}
+                  // Ảnh: mở trong khung xem có phóng to; tệp khác: mở bằng trình xem của máy
+                  onClick={() => (img ? setViewer(images.findIndex((x) => x.url === a.url)) : window.open(a.url, '_blank', 'noopener'))}
+                />
+              );
+            })}
           </Group>
         </Section>
       )}
+      {viewer !== null && <PhotoViewer photos={images.map((a) => ({ url: a.url, thumbUrl: a.url, capturedAt: 0 }))} index={Math.max(0, viewer)} title={p.title} onClose={() => setViewer(null)} />}
 
       {p.requireAck && !need && !canEdit && (
         <Section>

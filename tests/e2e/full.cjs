@@ -425,6 +425,23 @@ async function main() {
   await shot(A, 'admin-reports');
   await cell(A, 'Tivi');
   check('Quản lý xem ảnh và người gửi', await has(A, 'Nguyễn Thị Hoa'));
+  // Xem ảnh toàn màn hình: ảnh thu nhỏ hiện ngay, ảnh nét tải xong thay vào; chạm 2 lần để phóng to
+  await A.locator('.photo-grid .ph').filter({ visible: true }).first().click();
+  await A.locator('.pv-full.on').first().waitFor({ timeout: 8000 }).catch(() => {});
+  check('Mở ảnh toàn màn hình, tải ảnh nét', (await A.locator('.pv .pv-full.on').count()) > 0);
+  const tapAt = (x, y) => A.evaluate(([x, y]) => {
+    const st = document.querySelector('.pv-stage');
+    for (const t of ['pointerdown', 'pointerup']) st.dispatchEvent(new PointerEvent(t, { pointerId: 1, clientX: x, clientY: y, bubbles: true, pointerType: 'touch', isPrimary: true }));
+  }, [x, y]);
+  await tapAt(250, 420);
+  await A.waitForTimeout(90);
+  await tapAt(250, 420);
+  await A.waitForTimeout(500);
+  const zt = await A.evaluate(() => document.querySelector('.pv-box.current')?.style.transform || '');
+  check('Chạm 2 lần để phóng to ảnh', /scale\(2\.5\)/.test(zt), zt);
+  await A.locator('.pv .glass-btn[aria-label="Đóng"]').click();
+  await A.waitForTimeout(400);
+  check('Đóng khung xem ảnh', (await A.locator('.pv').count()) === 0);
   await tap(A, '.btn', 'Không đạt');
   await sheet(A).locator('textarea').fill('Còn bụi kệ tivi, lau lại');
   await sheetDone(A, 'Gửi');

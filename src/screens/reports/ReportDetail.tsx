@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useDoc, useSession, useStoreData } from '../../state/session';
 import { Page } from '../../ui/Page';
 import { useUI, SheetHead } from '../../ui/Overlay';
 import { Avatar, Cell, Check, Empty, Group, Img, Loading, Pill, Section } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
+import { PhotoViewer } from '../../ui/PhotoViewer';
 import { dmy, stamp, vnDate, vnTime } from '../../lib/time';
 import { isLate } from '../../lib/reports';
 import { formatDistance } from '../../lib/geo';
@@ -21,7 +21,7 @@ export function ReportDetailScreen({ id }: { id: string }) {
   const ui = useUI();
   const actor = useActor();
   const { data: r, loading } = useDoc<Report>('reports', id);
-  const [viewer, setViewer] = useState<{ photos: Photo[]; index: number; title: string } | null>(null);
+  const [viewer, setViewer] = useState<{ photos: (Photo & { label?: string })[]; index: number; title: string } | null>(null);
   const { open, element } = useCapture();
 
   if (loading) return <Page title="Báo cáo" large={false}><Loading /></Page>;
@@ -107,7 +107,7 @@ export function ReportDetailScreen({ id }: { id: string }) {
           </div>
         )}
         {area?.refPhotoUrl && (
-          <button className="btn tinted sm mt12" onClick={() => setViewer({ photos: [{ url: area.refPhotoUrl!, thumbUrl: area.refPhotoUrl!, capturedAt: 0 }, ...r.photos], index: 0, title: 'So với ảnh chuẩn' })}>
+          <button className="btn tinted sm mt12" onClick={() => setViewer({ photos: [{ url: area.refPhotoUrl!, thumbUrl: area.refPhotoUrl!, capturedAt: 0, label: 'Ảnh chuẩn' }, ...r.photos], index: 0, title: 'So với ảnh chuẩn' })}>
             <Icon name="photo" size={17} />
             So với ảnh chuẩn
           </button>
@@ -233,47 +233,5 @@ function FailSheet({ criteria, checks, close, onSubmit }: { criteria: string[]; 
         )}
       </div>
     </>
-  );
-}
-
-export function PhotoViewer({ photos, index, title, onClose }: { photos: Photo[]; index: number; title: string; onClose: () => void }) {
-  const [i, setI] = useState(index);
-  return createPortal(
-    <div className="viewer" role="dialog" aria-label="Xem ảnh">
-      <div className="viewer-top">
-        <button className="glass-btn icon" onClick={onClose} aria-label="Đóng">
-          <Icon name="xmark" size={20} stroke={2.4} />
-        </button>
-        <div className="center grow">
-          <div className="t-headline ellipsis">{title}</div>
-          <div className="t-foot" style={{ color: 'rgba(255,255,255,0.7)' }}>
-            {i + 1} / {photos.length}
-            {photos[i]?.capturedAt ? ` · ${stamp(photos[i].capturedAt)}` : ' · Ảnh chuẩn'}
-          </div>
-        </div>
-        <div style={{ width: 44 }} />
-      </div>
-      <div
-        className="viewer-track"
-        ref={(el) => {
-          if (el && el.dataset.init !== '1') {
-            el.dataset.init = '1';
-            el.scrollLeft = index * el.clientWidth;
-          }
-        }}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          const n = Math.round(el.scrollLeft / el.clientWidth);
-          if (n !== i) setI(n);
-        }}
-      >
-        {photos.map((p, k) => (
-          <div className="viewer-slide" key={k}>
-            <Img src={p.url} alt={`Ảnh ${k + 1}`} />
-          </div>
-        ))}
-      </div>
-    </div>,
-    document.body,
   );
 }

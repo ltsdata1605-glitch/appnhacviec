@@ -13,7 +13,7 @@ import { closeRollcall, deleteRollcall, inAudience, nudgeRollcall, rollcallDone,
 import { REMIND_OPTIONS } from '../../lib/constants';
 import { addDays, dueLabel, fromInputs, friendly, now, vnDate, vnTime } from '../../lib/time';
 import { PersonPicker, useActor } from '../shared';
-import { PhotoViewer } from '../reports/ReportDetail';
+import { PhotoViewer } from '../../ui/PhotoViewer';
 import type { Media, Rollcall, RollcallAudience, UserProfile } from '../../lib/types';
 
 export function audienceLabel(a: RollcallAudience, nameOf: (u: string) => string): string {
