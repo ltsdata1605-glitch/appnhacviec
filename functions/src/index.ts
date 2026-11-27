@@ -614,13 +614,18 @@ async function generateRecurring(today: string) {
   }
 }
 
+/** Thời hạn lưu ảnh mặc định (ngày) khi kho chưa cài riêng */
+const RETENTION_DAYS = 15;
+
 async function purgeOldPhotos(today: string) {
   const stores = await db.collection('stores').get();
   const bucket = getStorage().bucket();
   for (const sd of stores.docs) {
-    const days = Number(sd.get('retentionDays')) || 45;
+    // Xoá cuốn chiếu: mỗi ngày xoá ảnh vừa quá thời hạn lưu (mặc định 15 ngày).
+    // Quét lùi thêm 60 ngày để dọn cả ảnh tồn khi rút ngắn thời hạn hoặc khi có ngày lỡ chạy.
+    const days = Number(sd.get('retentionDays')) || RETENTION_DAYS;
     const cutoff = addDays(today, -days);
-    const from = addDays(cutoff, -10);
+    const from = addDays(cutoff, -60);
     const snap = await db.collection('reports').where('storeCode', '==', sd.id).where('date', '>=', from).where('date', '<', cutoff).get();
     for (const doc of snap.docs) {
       if (doc.get('photosPurged')) continue;
@@ -630,17 +635,18 @@ async function purgeOldPhotos(today: string) {
       }
       await doc.ref.update({ photosPurged: true, previousPhotos: FieldValue.delete() });
     }
-    // Ảnh xác nhận hoàn tất công việc: cùng thời hạn lưu với ảnh báo cáo
+    // Ảnh xác nhận hoàn tất công việc: cùng thời hạn lưu, tính theo lúc chụp từng ảnh
+    // (việc tạo đã lâu nhưng mới chụp ảnh hoàn tất thì ảnh vẫn được giữ đủ thời hạn).
     const cutoffMs = Date.parse(`${cutoff}T00:00:00+07:00`);
     const tasks = await db
       .collection('tasks')
       .where('storeCode', '==', sd.id)
-      .where('createdAt', '>=', cutoffMs - 10 * 86400000)
-      .where('createdAt', '<', cutoffMs)
+      .where('createdAt', '>=', cutoffMs - 60 * 86400000)
       .get();
     for (const doc of tasks.docs) {
-      const photos = (doc.get('photos') || []) as { path?: string; thumbPath?: string }[];
+      const photos = (doc.get('photos') || []) as { path?: string; thumbPath?: string; capturedAt?: number }[];
       if (!photos.length || doc.get('photosPurged')) continue;
+      if (photos.some((p) => (p.capturedAt || 0) >= cutoffMs)) continue; // còn ảnh trong hạn
       for (const p of photos) {
         for (const path of [p.path, p.thumbPath]) if (path) await bucket.file(path).delete({ ignoreNotFound: true }).catch(() => {});
       }

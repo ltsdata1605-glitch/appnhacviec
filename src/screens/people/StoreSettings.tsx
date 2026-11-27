@@ -122,7 +122,7 @@ export function StoreSettingsScreen() {
               } else if (v) save({ reminderTimes: reminders.filter((x) => x !== v) });
             }}
           />
-          <Cell title="Lưu ảnh" detail={`${st.retentionDays} ngày`} chevron onClick={() => pickNum('Tự xoá ảnh sau', [30, 45, 60, 90, 180], 'ngày', st.retentionDays, 'retentionDays')} />
+          <Cell title="Lưu ảnh" sub="Tự xoá cuốn chiếu lúc 0h05 mỗi ngày" detail={`${st.retentionDays} ngày`} chevron onClick={() => pickNum('Tự xoá ảnh sau', [7, 10, 15, 30, 45], 'ngày', st.retentionDays, 'retentionDays')} />
         </Group>
       </Section>
 

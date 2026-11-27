@@ -23,7 +23,7 @@ Gói Blaze là bắt buộc để chạy **nhắc việc tự động theo giờ
 2. Tạo tài khoản thanh toán và nhập thẻ.
 3. Khi được hỏi về ngân sách (budget), đặt mức cảnh báo, ví dụ **5 USD/tháng**. Ngân sách chỉ dùng để cảnh báo, không chặn app.
 
-**Chi phí dự kiến** cho 1 siêu thị khoảng 40 người, ảnh lưu 45 ngày: phần lớn nằm trong hạn mức miễn phí, thường **dưới 50.000đ/tháng**.
+**Chi phí dự kiến** cho 1 siêu thị khoảng 40 người, ảnh lưu 15 ngày (tự xoá cuốn chiếu): phần lớn nằm trong hạn mức miễn phí, thường **dưới 50.000đ/tháng**.
 
 ## Bước 3. Bật đăng nhập bằng Google
 

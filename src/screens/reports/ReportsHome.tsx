@@ -121,9 +121,16 @@ function ReportRow({ r, onClick, showUser }: { r: Report; onClick: () => void; s
   return (
     <Cell
       leading={
-        <div className="thumb" style={{ width: 44, height: 44 }}>
-          <Img src={r.photos[0]?.thumbUrl} />
-        </div>
+        r.photosPurged ? (
+          // Ảnh đã tự xoá theo thời hạn lưu: hiện biểu tượng thay cho ô trống
+          <div className="thumb" style={{ width: 44, height: 44, display: 'grid', placeItems: 'center', color: 'var(--label-3)' }} title="Ảnh đã xoá theo thời hạn lưu">
+            <Icon name="photo" size={20} />
+          </div>
+        ) : (
+          <div className="thumb" style={{ width: 44, height: 44 }}>
+            <Img src={r.photos[0]?.thumbUrl} />
+          </div>
+        )
       }
       sepInset={72}
       title={showUser ? r.userName : r.areaName}

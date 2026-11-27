@@ -30,7 +30,7 @@ export function defaultStore(code: string, name: string, chain: Store['chain']):
     quietStart: '22:00',
     quietEnd: '06:00',
     minPhotos: 2,
-    retentionDays: 45,
+    retentionDays: 15, // ảnh báo cáo, ảnh xác nhận công việc tự xoá cuốn chiếu sau 15 ngày
     escalateMinutes: 30,
     departments: DEFAULT_DEPARTMENTS,
     brands: DEFAULT_BRANDS,

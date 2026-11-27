@@ -77,7 +77,7 @@ async function trigger(fn) {
   // ----- Dữ liệu mẫu -----
   await put('stores/930', {
     code: '930', name: 'Siêu thị 930', chain: 'DMX', deadline: hm, reminderTimes: [hm], digestTime: hm,
-    quietStart: '23:59', quietEnd: '00:00', retentionDays: 45, escalateMinutes: 30, radius: 200, minPhotos: 2, location: null,
+    quietStart: '23:59', quietEnd: '00:00', retentionDays: 15, escalateMinutes: 30, radius: 200, minPhotos: 2, location: null,
     departments: ['Kho'], brands: [], createdAt: now,
   });
   await put('users/m930', { uid: 'm930', email: 'm930@test.vn', fullName: 'Quản Lý Ba', role: 'manager', status: 'active', storeCode: '930', createdAt: now - 864e5 * 10 });
@@ -99,11 +99,16 @@ async function trigger(fn) {
     requirePhoto: false, requireApproval: false, completionMode: 'any', remindBefore: 15, recurrence: { type: 'daily', time: '08:30' }, active: true, lastGenerated: null, createdBy: 'm930', createdAt: now,
   });
   const oldDate = vnDate(now - 50 * 864e5);
+  const d16 = vnDate(now - 16 * 864e5);
+  const d14 = vnDate(now - 14 * 864e5);
+  for (const d of [d16, d14])
+    await put(`reports/930_${d}_ar930`, { storeCode: '930', date: d, areaId: 'ar930', areaName: 'Kho', uid: 's930', userName: 'Nhân Viên Ba', photos: [{ url: 'x', thumbUrl: 'y', path: `reports/930/${d}/ar930/s930/1.jpg`, thumbPath: `reports/930/${d}/ar930/s930/1_t.jpg`, capturedAt: Date.parse(`${d}T09:00:00+07:00`) }], submittedAt: Date.parse(`${d}T09:00:00+07:00`), attempt: 1 });
   // Việc có ảnh xác nhận tạo 50 ngày trước (quá thời hạn lưu) và việc mới (giữ ảnh)
-  const photoTask = (id, created) =>
-    put(`tasks/${id}`, { storeCode: '930', shared: false, scope: 'personal', assigneeUid: 's930', title: 'Ảnh xác nhận', status: 'done', createdBy: 'm930', createdAt: created, updatedAt: created, completions: {}, seenBy: {}, checklist: [], activity: [], photos: [{ url: 'x', thumbUrl: 'y', path: `tasks/930/${id}/s930/1.jpg`, thumbPath: `tasks/930/${id}/s930/1_t.jpg`, capturedAt: created }] });
-  await photoTask('oldPhotoTask', now - 50 * 864e5);
-  await photoTask('newPhotoTask', now - 3 * 864e5);
+  const photoTask = (id, created, shot = created) =>
+    put(`tasks/${id}`, { storeCode: '930', shared: false, scope: 'personal', assigneeUid: 's930', title: 'Ảnh xác nhận', status: 'done', createdBy: 'm930', createdAt: created, updatedAt: shot, completions: {}, seenBy: {}, checklist: [], activity: [], photos: [{ url: 'x', thumbUrl: 'y', path: `tasks/930/${id}/s930/1.jpg`, thumbPath: `tasks/930/${id}/s930/1_t.jpg`, capturedAt: shot }] });
+  await photoTask('oldPhotoTask', now - 16 * 864e5); // vừa quá 15 ngày
+  await photoTask('newPhotoTask', now - 13 * 864e5); // còn trong hạn
+  await photoTask('lateShotTask', now - 20 * 864e5, now - 2 * 864e5); // việc tạo đã lâu, ảnh mới chụp
   await put(`reports/930_${oldDate}_ar930`, { storeCode: '930', date: oldDate, areaId: 'ar930', areaName: 'Kho', uid: 's930', userName: 'Nhân Viên Ba', photos: [{ url: 'x', thumbUrl: 'y', path: `reports/930/${oldDate}/ar930/s930/1.jpg`, thumbPath: `reports/930/${oldDate}/ar930/s930/1_t.jpg`, capturedAt: now - 50 * 864e5 }], submittedAt: now - 50 * 864e5, attempt: 1 });
 
   console.log('\n■ Hàm every5Minutes (chạy mỗi 5 phút)');
@@ -148,9 +153,12 @@ async function trigger(fn) {
   const s3 = await notesOf('s930');
   check('Báo nhân viên bộ phận về việc lặp lại', s3.some((n) => n.title === 'Việc hôm nay' && n.body.includes('Kiểm quỹ đầu ca')));
   const old = await get(`reports/930_${oldDate}_ar930`);
-  check('Xoá ảnh báo cáo quá 45 ngày', old?.photosPurged === true);
-  check('Xoá ảnh xác nhận công việc quá 45 ngày', (await get('tasks/oldPhotoTask'))?.photosPurged === true);
+  check('Xoá ảnh báo cáo tồn lâu (50 ngày) khi rút thời hạn còn 15 ngày', old?.photosPurged === true);
+  check('Xoá cuốn chiếu ảnh báo cáo vừa quá 15 ngày', (await get(`reports/930_${d16}_ar930`))?.photosPurged === true);
+  check('Giữ ảnh báo cáo 14 ngày (còn trong hạn)', !(await get(`reports/930_${d14}_ar930`))?.photosPurged);
+  check('Xoá ảnh xác nhận công việc vừa quá 15 ngày', (await get('tasks/oldPhotoTask'))?.photosPurged === true);
   check('Giữ ảnh xác nhận công việc còn trong hạn', !(await get('tasks/newPhotoTask'))?.photosPurged);
+  check('Việc tạo đã lâu nhưng ảnh mới chụp: vẫn giữ ảnh', !(await get('tasks/lateShotTask'))?.photosPurged);
 
   const pass = results.filter(Boolean).length;
   console.log(`\n==== KẾT QUẢ HÀM THEO GIỜ: ${pass}/${results.length} đạt ====`);
