@@ -1,4 +1,5 @@
-// Tải ảnh chụp lên song song (tối đa 3 ảnh cùng lúc, ảnh lớn và ảnh nhỏ đi cùng nhau) thay vì lần lượt từng tệp.
+// Tải ảnh chụp lên song song: tối đa 2 ảnh cùng lúc (mỗi ảnh tải ảnh lớn rồi ảnh nhỏ).
+// Không mở quá nhiều kết nối cùng lúc để việc tải ổn định trên mạng di động.
 import { api } from './backend';
 import type { Shot } from './image';
 import type { Photo } from './types';
@@ -13,10 +14,8 @@ export async function uploadShots(shots: Shot[], baseOf: (shot: Shot, index: num
   };
   const one = async (sh: Shot, i: number): Promise<Photo> => {
     const base = baseOf(sh, i);
-    const [url, thumbUrl] = await Promise.all([
-      api().upload(`${base}.jpg`, sh.blob, 'image/jpeg').then(tick),
-      api().upload(`${base}_t.jpg`, sh.thumb, 'image/jpeg').then(tick),
-    ]);
+    const url = tick(await api().upload(`${base}.jpg`, sh.blob, 'image/jpeg'));
+    const thumbUrl = tick(await api().upload(`${base}_t.jpg`, sh.thumb, 'image/jpeg'));
     return { url, thumbUrl, path: `${base}.jpg`, thumbPath: `${base}_t.jpg`, capturedAt: sh.capturedAt, hash: sh.hash, w: sh.w, h: sh.h };
   };
   const out: Photo[] = new Array(shots.length);
@@ -27,6 +26,6 @@ export async function uploadShots(shots: Shot[], baseOf: (shot: Shot, index: num
       out[i] = await one(shots[i], i);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(3, shots.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(2, shots.length) }, worker));
   return out;
 }

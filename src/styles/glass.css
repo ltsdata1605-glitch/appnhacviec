@@ -1113,3 +1113,625 @@ body {
     animation: none;
   }
 }
+
+/* =========================================================
+   Báo cáo khai thác
+   ========================================================= */
+.quick {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.quick button {
+  padding: 11px 2px 9px;
+  font-size: 11.5px;
+  letter-spacing: -0.1px;
+  white-space: nowrap;
+}
+.quick .q-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+}
+.quick .q-icon.bg-teal {
+  --q: var(--teal);
+}
+.sales {
+  padding: 4px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* không để nội dung kéo rộng quá màn hình */
+  gap: 12px;
+}
+.sales-who {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sales-who-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  box-shadow: inset 0 0 0 1px var(--pill-border), var(--shadow-glass);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--label);
+}
+.sales-who-pill svg {
+  color: var(--tint);
+}
+.sales-card {
+  background: var(--bg-2);
+  border-radius: 22px;
+  box-shadow: var(--shadow-card);
+  padding: 12px 12px 12px;
+}
+.sales-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 10px;
+}
+.sales-card-head .sales-gi {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex: none;
+}
+.sales-card-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.1px;
+  text-transform: uppercase;
+}
+.sales-add {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tint);
+  padding: 6px 4px;
+}
+.sales-rev {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 52px;
+  padding: 0 6px 0 16px;
+  border-radius: 16px;
+  background: var(--inset-field);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.sales-rev:focus-within {
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 2px var(--tint), 0 0 0 4px color-mix(in srgb, var(--tint) 14%, transparent);
+}
+.sales-rev input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--label);
+  font-variant-numeric: tabular-nums;
+}
+.sales-rev input::placeholder {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--label-3);
+}
+.money-unit {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--label-3);
+}
+.sales-plus {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--tint);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--tint) 30%, transparent);
+  transition: transform 0.3s var(--bounce);
+}
+.sales-plus:active {
+  transform: scale(0.9);
+}
+.sales-rev-hint {
+  padding: 7px 4px 2px;
+  font-size: 13px;
+  color: var(--label-2);
+  font-variant-numeric: tabular-nums;
+}
+.sales-rev-hint.bad {
+  color: var(--red-text);
+  font-weight: 600;
+}
+.sales-flags {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.sales-flag {
+  min-width: 0;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--pill-bg);
+  box-shadow: inset 0 0 0 1px var(--pill-border);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--label);
+  transition: background 0.2s, box-shadow 0.2s, transform 0.3s var(--bounce);
+}
+.sales-flag:active {
+  transform: scale(0.96);
+}
+.sales-flag.on {
+  background: color-mix(in srgb, var(--green) 14%, var(--bg-2));
+  box-shadow: inset 0 0 0 1.5px var(--green);
+  color: var(--green-text);
+}
+.sales-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1.5px var(--label-3);
+  color: #fff;
+  flex: none;
+}
+.sales-flag.on .sales-check {
+  background: var(--green);
+  box-shadow: none;
+}
+.sales-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.sales-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px 0 10px;
+  border-radius: 14px;
+  background: var(--fill-4);
+  transition: background 0.2s;
+}
+.sales-item.has {
+  background: color-mix(in srgb, var(--tint) 10%, var(--bg-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint) 25%, transparent);
+}
+.sales-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--pill-border), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.stepper button {
+  width: 30px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--tint);
+  border-radius: 999px;
+  transition: transform 0.25s var(--bounce), background 0.15s;
+}
+.stepper button:active {
+  transform: scale(0.85);
+  background: var(--fill-3);
+}
+.stepper button:disabled {
+  color: var(--label-4);
+}
+.stepper-n {
+  min-width: 22px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--label-3);
+}
+.stepper.has .stepper-n {
+  color: var(--label);
+}
+.money-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  width: 92px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 1px var(--pill-border);
+}
+.money-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: right;
+  color: var(--label);
+  font-variant-numeric: tabular-nums;
+}
+.money-field:focus-within {
+  box-shadow: inset 0 0 0 2px var(--tint);
+}
+.sales-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.sales-extra input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--fill-4);
+  box-shadow: inset 0 0 0 1px var(--pill-border);
+  font: inherit;
+  font-size: 16px;
+  color: var(--label);
+  outline: none;
+}
+.sales-extra input:focus {
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 2px var(--tint);
+}
+.sales-note {
+  min-height: 72px !important;
+  border-radius: 14px;
+  background: var(--fill-4) !important;
+  font-size: 16px;
+}
+.sales-preview {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--fill-4);
+  font-family: var(--font);
+  font-size: 14.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--label);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.card.sales-preview {
+  background: var(--bg-2);
+}
+/* Thanh đáy dính: tổng tiền, số món và nút báo cáo luôn trong tầm tay */
+.sales-bar {
+  position: sticky;
+  bottom: calc(max(var(--safe-bottom), 10px) + 6px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-rim), inset 0 1px 0 var(--glass-hi), var(--shadow-float);
+}
+.sales-bar-sum {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.sales-bar-sum > span:first-child {
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.sales-send {
+  padding: 0 18px;
+}
+.saved-check {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(180deg, #4fd76f, var(--green));
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--green) 40%, transparent);
+  animation: popIn 0.5s var(--bounce) both;
+}
+@keyframes popIn {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+.sales-row {
+  min-height: 60px;
+}
+.sales-row-rev {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.chip-date {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  font-size: 16px;
+}
+
+/* Thống kê */
+.sales-hero-v {
+  font-family: var(--font-round);
+  font-size: 40px;
+  line-height: 46px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 2px 0 2px;
+}
+.sales-hero-v span {
+  font-size: 20px;
+  color: var(--label-2);
+}
+.sales-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tint) 12%, var(--bg-2));
+  color: var(--tint);
+  font-size: 14px;
+  font-weight: 600;
+}
+.sales-meters {
+  display: grid;
+  gap: 12px;
+}
+.meter-row {
+  display: grid;
+  grid-template-columns: 78px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+}
+.meter-l {
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.meter-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--fill-4);
+  overflow: hidden;
+}
+.meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tint);
+  transition: width 0.8s var(--spring);
+}
+.meter-v {
+  text-align: right;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.bars {
+  position: relative;
+}
+.bars-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  border-top: 1px dashed var(--separator);
+  pointer-events: none;
+}
+.bars-max {
+  position: absolute;
+  right: 0;
+  top: -18px;
+  font-size: 11px;
+  color: var(--label-2);
+}
+.bars-plot {
+  height: 150px;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-bottom: 1px solid var(--separator);
+}
+.bar-col {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.bar-fill {
+  display: block;
+  width: 100%;
+  max-width: 28px;
+  border-radius: 4px 4px 0 0;
+  background: var(--tint);
+  transition: height 0.7s var(--spring), opacity 0.2s;
+}
+.bars-plot:has(.bar-col.on) .bar-col:not(.on) .bar-fill {
+  opacity: 0.45;
+}
+.bar-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: var(--label);
+  color: var(--bg-2);
+  font-size: 12.5px;
+  box-shadow: var(--shadow-float);
+}
+.bar-tip.left {
+  left: 0;
+  transform: none;
+}
+.bar-tip.right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.bar-col.on {
+  z-index: 3;
+}
+.bars-plot .bar-col .bar-tip {
+  top: -30px;
+  bottom: auto;
+}
+.bars-x {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
+}
+.bars-x span {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--label-2);
+  white-space: nowrap;
+  overflow: visible;
+}
+.sales-top {
+  display: grid;
+  gap: 0;
+  padding: 4px 16px;
+}
+.sales-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  font-size: 15px;
+  border-bottom: 0.5px solid var(--separator);
+}
+.sales-top-row:last-child {
+  border-bottom: 0;
+}
+.sales-board {
+  padding: 6px;
+}
+.board-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  text-align: left;
+  transition: background 0.15s, transform 0.3s var(--bounce);
+}
+.board-row:active {
+  background: var(--fill-4);
+  transform: scale(0.98);
+}
+.board-rank {
+  width: 24px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--label-2);
+}
+.board-rank.top {
+  color: var(--tint);
+}
+.board-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.board-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.board-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--fill-4);
+  overflow: hidden;
+}
+.board-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tint);
+}
+.board-v {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+/* Mặt hàng nhập số tiền (bảo hiểm) chiếm trọn hàng để đọc đủ tên */
+.sales-item.money {
+  grid-column: 1 / -1;
+}
+.money-field {
+  width: 120px;
+}

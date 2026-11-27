@@ -6,6 +6,7 @@ import { defaultStore, ROLE_LABEL } from './constants';
 import { isActor } from './tasks';
 import { extractMentions } from './mentions';
 import { reportId } from './reports';
+import { contribOf, sumAggs } from './sales';
 import type {
   Activity,
   Area,
@@ -27,6 +28,8 @@ import type {
   TaskScope,
   TaskTemplate,
   UserProfile,
+  SalesReport,
+  SalesAgg,
 } from './types';
 
 export interface Actor {
@@ -684,4 +687,81 @@ export async function closeRollcall(rc: Rollcall, closed: boolean) {
 export async function deleteRollcall(rc: Rollcall) {
   for (const m of rc.media) if (m.path) await api().removeFile(m.path);
   await api().remove('rollcalls', rc.id);
+}
+
+// ---------------- Báo cáo khai thác ----------------
+export interface SalesInput {
+  storeCode: string;
+  by: Actor & { userCode?: string | null };
+  revenue: number;
+  revenueExpr: string;
+  flags: SalesReport['flags'];
+  items: Record<string, number>;
+  amounts: Record<string, number>;
+  extras: SalesReport['extras'];
+  names: Record<string, string>;
+  groupOf: SalesReport['groupOf'];
+  groupQty: SalesReport['groupQty'];
+  qty: number;
+  note: string;
+  text: string;
+  mentions: string[];
+}
+
+/** Lưu báo cáo khai thác (tạo mới hoặc sửa). id cố định cho mỗi lần soạn: bấm lại khi mạng chậm không tạo trùng. */
+export async function saveSalesReport(input: SalesInput, id: string, existing?: SalesReport | null): Promise<string> {
+  const t = now();
+  const data: Omit<SalesReport, 'id'> = {
+    storeCode: input.storeCode,
+    uid: existing?.uid || input.by.uid,
+    userName: existing?.userName || input.by.name,
+    userCode: existing ? existing.userCode ?? null : input.by.userCode || null,
+    date: existing?.date || vnDate(t),
+    createdAt: existing?.createdAt || t,
+    updatedAt: t,
+    revenue: input.revenue,
+    revenueExpr: input.revenueExpr,
+    flags: input.flags,
+    items: input.items,
+    amounts: input.amounts,
+    extras: input.extras,
+    names: input.names,
+    groupOf: Object.fromEntries(Object.entries(input.groupOf).filter(([k]) => k in input.items || k in input.amounts)),
+    groupQty: input.groupQty,
+    qty: input.qty,
+    note: input.note,
+    mentions: input.mentions,
+    text: input.text,
+  };
+  await api().set('salesReports', id, data as unknown as Record<string, unknown>);
+  if (api().mode === 'demo') await aggregateSalesLocal(data.storeCode, data.uid, data.date);
+  const tagged = input.mentions.filter((u) => u !== input.by.uid);
+  if (tagged.length && input.note.trim()) await notifyMentions(tagged, input.storeCode, input.by, 'báo cáo khai thác', input.note.trim(), `sales:${id}`);
+  return id;
+}
+
+export async function deleteSalesReport(r: SalesReport) {
+  await api().remove('salesReports', r.id);
+  if (api().mode === 'demo') await aggregateSalesLocal(r.storeCode, r.uid, r.date);
+}
+
+/** Chế độ xem thử (không có máy chủ): tự cộng dồn số liệu giống Cloud Function onSalesReportWritten */
+export async function aggregateSalesLocal(storeCode: string, uid: string, date: string) {
+  const ym = date.slice(0, 7);
+  const t = now();
+  const reports = await api().query<SalesReport>('salesReports', [['storeCode', '==', storeCode], ['uid', '==', uid], ['date', '==', date]]);
+  const who = reports[0];
+  const day = sumAggs(reports.map(contribOf));
+  const dayId = `${storeCode}_${date}_${uid}`;
+  if (reports.length) await api().set('salesDaily', dayId, { ...day, storeCode, uid, date, ym, userName: who.userName, userCode: who.userCode || null, updatedAt: t });
+  else await api().remove('salesDaily', dayId).catch(() => {});
+  const days = await api().query<SalesAgg>('salesDaily', [['storeCode', '==', storeCode], ['uid', '==', uid], ['ym', '==', ym]]);
+  const monthId = `${storeCode}_${ym}_${uid}`;
+  if (days.length) await api().set('salesMonthly', monthId, { ...sumAggs(days), storeCode, uid, ym, userName: days[0].userName, userCode: days[0].userCode || null, updatedAt: t });
+  else await api().remove('salesMonthly', monthId).catch(() => {});
+  const storeDays = await api().query<SalesAgg>('salesDaily', [['storeCode', '==', storeCode], ['date', '==', date]]);
+  await api().set('salesStoreDaily', `${storeCode}_${date}`, { ...sumAggs(storeDays), storeCode, date, ym, updatedAt: t });
+  const months = await api().query<SalesAgg>('salesMonthly', [['storeCode', '==', storeCode], ['ym', '==', ym]]);
+  const sorted = [...months].sort((a, b) => b.rev100 - a.rev100);
+  await api().set('salesRanks', `${storeCode}_${ym}`, { storeCode, ym, ranks: Object.fromEntries(sorted.map((m, i) => [m.uid!, i + 1])), total: sorted.length, updatedAt: t });
 }

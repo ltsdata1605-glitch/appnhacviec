@@ -54,7 +54,7 @@ async function main() {
       hasTouch: true,
       userAgent: UA,
       geolocation: NEAR,
-      permissions: ['geolocation', 'camera'],
+      permissions: ['geolocation', 'camera', 'clipboard-read', 'clipboard-write'],
       timezoneId: 'Asia/Ho_Chi_Minh',
       locale: 'vi-VN',
     });
@@ -728,6 +728,92 @@ async function main() {
   await A.waitForTimeout(1200);
   check('Quản lý thấy tiến độ điểm danh theo người', (await has(A, 'Hoàn tất 1/')) && (await has(A, 'Nguyễn Thị Hoa')));
   await back(A);
+
+  // =====================================================================
+  sec('9b. Báo cáo khai thác');
+  const openSales = async (page) => {
+    await noBanner(page);
+    await vis(page, '.quick button', 'Khai thác').first().click();
+    await page.waitForTimeout(900);
+  };
+  const pill = (page, label) => tap(page, '.header-pills button', label);
+  // Về màn hình gốc (thanh tab bị ẩn khi đang ở màn con)
+  const toRoot = async (page) => {
+    for (let i = 0; i < 5; i++) {
+      const b = vis(page, '.glass-btn[aria-label="Quay lại"]');
+      if (!(await b.count())) break;
+      await back(page);
+    }
+  };
+  for (const p of [A, C, D]) await toRoot(p);
+  await tab(C, 'Hôm nay');
+  await openSales(C);
+  const rev = C.getByLabel('Tổng doanh thu thực (triệu đồng)');
+  await rev.fill('5+3');
+  await C.locator('.sales-plus').filter({ visible: true }).click();
+  await C.keyboard.type('4,5');
+  check('Doanh thu gõ phép tính tự cộng', await has(C, '= 12,5 Tr'));
+  await C.getByLabel('Thêm Tivi', { exact: true }).click();
+  await C.getByLabel('Thêm Tai nghe', { exact: true }).click();
+  await C.getByLabel('Thêm Tai nghe', { exact: true }).click();
+  await C.getByLabel('Bảo hiểm rơi vỡ (triệu đồng)').fill('0,8');
+  await C.locator('.sales-flag', { hasText: 'Trả góp' }).filter({ visible: true }).click();
+  const preview = await C.locator('.sales-preview').filter({ visible: true }).first().innerText();
+  check('Xem trước tin đúng nội dung', ['Doanh thu: 12,5 Tr', 'Tivi 1', 'Tai nghe 2', 'Bảo hiểm rơi vỡ 0,8 Tr', 'Trả góp', 'Tổng: 4 món'].every((x) => preview.includes(x)), preview.split('\n').slice(3, 5).join(' | '));
+  await C.locator('.sales-send').filter({ visible: true }).click();
+  await C.waitForTimeout(1500);
+  check('Lưu báo cáo khai thác', await has(C, 'Đã lưu báo cáo'));
+  const clip = await C.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+  check('Tự chép tin để dán vào Zalo', clip.startsWith('📊 BÁO CÁO KHAI THÁC') && clip.includes('12,5 Tr'));
+  await sheet(C).locator('.btn', { hasText: 'Báo cáo đơn tiếp theo' }).click();
+  await C.waitForTimeout(500);
+  check('Màn nhập làm mới cho đơn tiếp theo', (await rev.inputValue()) === '');
+  await shot(C, 'sales-form');
+
+  // Người thứ hai trong kho 910: chính Quản lý (PG Hà đã chuyển sang kho 911 ở phần 7)
+  await tab(A, 'Tổng quan');
+  await openSales(A);
+  await A.getByLabel('Tổng doanh thu thực (triệu đồng)').filter({ visible: true }).fill('20');
+  await A.getByLabel('Thêm Tủ lạnh', { exact: true }).filter({ visible: true }).click();
+  await A.locator('.sales-send').filter({ visible: true }).click();
+  await A.waitForTimeout(1500);
+  check('Quản lý cũng báo cáo khai thác', await has(A, 'Đã lưu báo cáo'));
+  await sheet(A).locator('.btn', { hasText: 'Báo cáo đơn tiếp theo' }).click();
+
+  await pill(C, 'Nhật ký');
+  check('Nhật ký hiện đơn vừa báo cáo', await has(C, '12,5 Tr'));
+  await C.waitForTimeout(3000); // máy chủ cộng dồn số liệu (Cloud Function)
+  const hUid = (await fsQuery('users', 'email', 'hoa@test.vn'))[0].name.split('/').pop();
+  const agg = (await fsQuery('salesDaily', 'uid', hUid))[0];
+  check('Máy chủ cộng dồn số liệu theo người, theo ngày', !!agg && Number(agg.fields.rev100.integerValue) === 1250 && Number(agg.fields.qty.integerValue) === 4);
+  await pill(C, 'Thống kê');
+  await C.waitForTimeout(800);
+  check('Nhân viên xem thống kê của mình', (await has(C, '12,5')) && (await has(C, 'Trả góp')));
+  check('Nhân viên thấy hạng tháng trong kho (2/2)', await has(C, '2/2'));
+  check('Nhân viên không thấy bảng xếp hạng toàn kho', await hasNot(C, 'Xếp hạng nhân viên', 300));
+
+  await pill(A, 'Thống kê');
+  await A.waitForTimeout(1000);
+  check('Quản lý xem doanh thu toàn kho', await has(A, '32,5'));
+  check('Bảng xếp hạng toàn kho theo doanh thu', (await has(A, 'Xếp hạng nhân viên')) && (await has(A, 'Lê Trường Sơn')) && (await has(A, 'Nguyễn Thị Hoa')));
+  await shot(A, 'sales-stats');
+  await pill(A, 'Nhật ký');
+  check('Quản lý xem nhật ký toàn kho trong ngày', (await has(A, '20 Tr')) && (await has(A, '12,5 Tr')));
+  await back(A);
+
+  // Sửa báo cáo trong ngày
+  await pill(C, 'Nhật ký');
+  await vis(C, '.sales-row', '12,5 Tr').first().click();
+  await C.waitForTimeout(900);
+  await tap(C, '.glass-btn[aria-label="Tuỳ chọn"]');
+  await action(C, 'Sửa báo cáo');
+  await C.waitForTimeout(800);
+  await C.getByLabel('Tổng doanh thu thực (triệu đồng)').filter({ visible: true }).fill('15');
+  await C.locator('.sales-send').filter({ visible: true }).click();
+  await C.waitForTimeout(3500);
+  const agg2 = (await fsQuery('salesDaily', 'uid', hUid))[0];
+  check('Sửa báo cáo trong ngày, số liệu tính lại', !!agg2 && Number(agg2.fields.rev100.integerValue) === 1500 && Number(agg2.fields.orders.integerValue) === 1);
+  for (let i = 0; i < 2; i++) await back(C);
 
   sec('10. Lỗi treo khi lưu trên iPhone (iOS 26)');
   // Đăng nhập (firebaseLocalStorageDb) và dữ liệu (firestore/...) không được ghi IndexedDB.

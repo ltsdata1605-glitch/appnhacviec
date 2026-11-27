@@ -45,7 +45,8 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || (isManagerOf(code) && changedOnly([
         'name', 'address', 'location', 'radius', 'deadline', 'reminderTimes', 'digestTime',
-        'quietStart', 'quietEnd', 'minPhotos', 'retentionDays', 'escalateMinutes', 'departments', 'brands', 'chain'
+        'quietStart', 'quietEnd', 'minPhotos', 'retentionDays', 'escalateMinutes', 'departments', 'brands', 'chain',
+        'salesCatalog'
       ]));
     }
 
@@ -193,6 +194,56 @@ service cloud.firestore {
       // Phiếu kiểm quỹ đã lưu không sửa được; chỉ quản lý được xoá
       allow update: if false;
       allow delete: if isManagerOf(resource.data.storeCode);
+    }
+
+    // ---------- Báo cáo khai thác (mỗi báo cáo = 1 đơn hàng) ----------
+    match /salesReports/{id} {
+      function validSales(d) {
+        return d.storeCode is string && d.uid is string && d.date is string
+          && d.revenue is number && d.revenue >= 0 && d.revenue <= 100000
+          && d.qty is int && d.qty >= 0 && d.qty <= 5000
+          && d.items is map && d.amounts is map && d.extras is list && d.extras.size() <= 60
+          && d.text is string && d.text.size() <= 5000
+          && d.note is string && d.note.size() <= 2000
+          && d.mentions is list && d.mentions.size() <= 30;
+      }
+      function ownToday() {
+        return resource.data.uid == request.auth.uid && inStore(resource.data.storeCode) && isVnToday(resource.data.date);
+      }
+      allow read: if can(resource.data.storeCode, 'sales')
+        || (inStore(resource.data.storeCode) && (resource.data.uid == request.auth.uid
+            || request.auth.uid in resource.data.get('mentions', [])));
+      allow create: if inStore(request.resource.data.storeCode)
+        && request.resource.data.uid == request.auth.uid
+        && isVnToday(request.resource.data.date)
+        && recent(request.resource.data.createdAt)
+        && validSales(request.resource.data);
+      // Nhân viên sửa, xoá báo cáo của mình trong ngày; quản lý sửa, xoá mọi lúc
+      allow update: if validSales(request.resource.data)
+        && request.resource.data.storeCode == resource.data.storeCode
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.date == resource.data.date
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (isManagerOf(resource.data.storeCode) || ownToday());
+      allow delete: if isManagerOf(resource.data.storeCode) || ownToday();
+    }
+    // Số liệu cộng dồn do máy chủ tính (chỉ đọc)
+    match /salesDaily/{id} {
+      allow read: if can(resource.data.storeCode, 'sales') || (inStore(resource.data.storeCode) && resource.data.uid == request.auth.uid);
+      allow write: if false;
+    }
+    match /salesMonthly/{id} {
+      allow read: if can(resource.data.storeCode, 'sales') || (inStore(resource.data.storeCode) && resource.data.uid == request.auth.uid);
+      allow write: if false;
+    }
+    match /salesStoreDaily/{id} {
+      allow read: if can(resource.data.storeCode, 'sales');
+      allow write: if false;
+    }
+    // Thứ hạng tháng (chỉ có hạng, không có doanh thu của người khác)
+    match /salesRanks/{id} {
+      allow read: if inStore(resource.data.storeCode);
+      allow write: if false;
     }
 
     // ---------- Điểm danh ----------

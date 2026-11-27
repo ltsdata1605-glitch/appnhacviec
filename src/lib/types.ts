@@ -11,6 +11,7 @@ export interface Permissions {
   library?: boolean; // Đăng thư viện
   review?: boolean; // Xem & chấm báo cáo ảnh
   approve?: boolean; // Duyệt nhân viên mới
+  sales?: boolean; // Xem báo cáo khai thác, thống kê, xếp hạng toàn kho
 }
 
 export interface UserProfile {
@@ -58,6 +59,7 @@ export interface Store {
   escalateMinutes: number;
   departments: string[];
   brands: string[];
+  salesCatalog?: SalesGroup[]; // danh mục mặt hàng báo cáo khai thác (trống = mặc định)
   createdAt: number;
 }
 
@@ -346,4 +348,87 @@ export interface Rollcall {
   updatedAt: number;
   closed?: boolean;
   reminded?: { before?: boolean; due?: boolean };
+}
+
+// ---------------- Báo cáo khai thác ----------------
+export type SalesGroupKey = 'main' | 'priority' | 'accessory' | 'appliance' | 'vas';
+
+export interface SalesItem {
+  key: string; // a-z0-9_ — dùng làm khoá thống kê
+  name: string;
+  money?: boolean; // nhập số tiền (Tr) thay vì số lượng, ví dụ bảo hiểm
+  hidden?: boolean;
+}
+
+export interface SalesGroup {
+  key: SalesGroupKey;
+  name: string;
+  items: SalesItem[];
+}
+
+export interface SalesExtra {
+  group: SalesGroupKey;
+  name: string;
+  qty: number;
+}
+
+export interface SalesFlags {
+  traGop: boolean;
+  moVi: boolean;
+  chienGia: boolean;
+}
+
+/** Một báo cáo khai thác = một đơn hàng */
+export interface SalesReport {
+  id: string;
+  storeCode: string;
+  uid: string;
+  userName: string;
+  userCode?: string | null;
+  date: string; // ngày (giờ Việt Nam)
+  createdAt: number;
+  updatedAt: number;
+  revenue: number; // triệu đồng
+  revenueExpr: string; // phép tính đã nhập, ví dụ "5+3+4"
+  flags: SalesFlags;
+  items: Record<string, number>; // khoá mặt hàng → số lượng
+  amounts: Record<string, number>; // khoá mặt hàng tính tiền → triệu đồng
+  extras: SalesExtra[];
+  names: Record<string, string>; // khoá → tên lúc báo cáo (giữ đúng khi danh mục đổi tên)
+  groupOf: Record<string, SalesGroupKey>; // khoá → nhóm lúc báo cáo
+  groupQty: Partial<Record<SalesGroupKey, number>>;
+  qty: number; // tổng số món
+  note: string;
+  mentions: string[];
+  text: string; // nội dung tin đã tạo
+}
+
+/** Số liệu cộng dồn (máy chủ tính lại sau mỗi lần báo cáo thay đổi) */
+export interface SalesAgg {
+  id: string;
+  storeCode: string;
+  uid?: string;
+  userName?: string;
+  userCode?: string | null;
+  date?: string;
+  ym?: string;
+  orders: number;
+  rev100: number; // doanh thu × 100 (đơn vị 10.000đ) để cộng không sai số
+  qty: number;
+  groupQty: Partial<Record<SalesGroupKey, number>>;
+  items: Record<string, number>;
+  amounts100: Record<string, number>;
+  names: Record<string, string>;
+  flags: { traGop: number; moVi: number; chienGia: number };
+  attach: { main: number; accessory: number; insurance: number; sim: number; vas: number; appliance: number };
+  updatedAt: number;
+}
+
+export interface SalesRanks {
+  id: string;
+  storeCode: string;
+  ym: string;
+  ranks: Record<string, number>; // uid → hạng doanh thu tháng
+  total: number;
+  updatedAt: number;
 }

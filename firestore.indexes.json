@@ -261,6 +261,70 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "salesReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "salesDaily",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "salesDaily",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "uid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "salesStoreDaily",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "storeCode",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

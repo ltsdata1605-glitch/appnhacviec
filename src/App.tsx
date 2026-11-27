@@ -17,6 +17,7 @@ import { LibraryScreen } from './screens/library/Library';
 import { PostDetailScreen } from './screens/library/PostDetail';
 import { CashDetailScreen } from './screens/cash/CashHistory';
 import { RollcallDetailScreen } from './screens/rollcall/Rollcall';
+import { SalesDetailScreen } from './screens/sales/Sales';
 import { PeopleScreen } from './screens/people/People';
 import { isOpen, isActor } from './lib/tasks';
 import { todayBoard } from './lib/reports';
@@ -159,6 +160,7 @@ function Main() {
       else if (kind === 'post' && id) go('library', <PostDetailScreen id={id} />);
       else if (kind === 'cash' && id) go('home', <CashDetailScreen id={id} />);
       else if (kind === 'rollcall' && id) go('home', <RollcallDetailScreen id={id} />);
+      else if (kind === 'sales' && id) go('home', <SalesDetailScreen id={id} />);
       else if (kind === 'people' && manager) go('people');
       else if (kind === 'tasks') go('tasks');
       else if (kind === 'reports') go('reports');

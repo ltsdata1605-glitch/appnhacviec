@@ -119,6 +119,41 @@ async function t(name, p) { try { await p; pass++; console.log('  ✓', name); }
   await t('NV không sửa nội dung điểm danh', assertFails(updateDoc(doc(kho, 'rollcalls/r1'), { title: 'x' })));
   await t('Kho khác không xem điểm danh', assertFails(getDoc(doc(mgr2, 'rollcalls/r1'))));
 
+  console.log('Báo cáo khai thác');
+  const sr = (uid, o = {}) => ({ storeCode: '1234', uid, userName: uid, userCode: null, date: today, createdAt: now, updatedAt: now, revenue: 12.5, revenueExpr: '5+3+4,5', flags: { traGop: true, moVi: false, chienGia: false }, items: { tivi: 1 }, amounts: {}, extras: [], names: { tivi: 'Tivi' }, groupOf: { tivi: 'main' }, groupQty: { main: 1 }, qty: 1, note: '', mentions: [], text: 'BÁO CÁO', ...o });
+  await t('NV gửi báo cáo khai thác của mình', assertSucceeds(setDoc(doc(kho, 'salesReports/s1'), sr('kho'))));
+  await t('Không gửi báo cáo khai thác hộ người khác', assertFails(setDoc(doc(kho, 'salesReports/s2'), sr('thungan'))));
+  await t('Không gửi báo cáo khai thác cho ngày khác', assertFails(setDoc(doc(kho, 'salesReports/s3'), sr('kho', { date: yesterday }))));
+  await t('Không gửi doanh thu âm', assertFails(setDoc(doc(kho, 'salesReports/s4'), sr('kho', { revenue: -1 }))));
+  await t('Người kho khác không gửi vào kho này', assertFails(setDoc(doc(mgr2, 'salesReports/s5'), sr('mgr2'))));
+  await t('NV xem báo cáo khai thác của mình', assertSucceeds(getDoc(doc(kho, 'salesReports/s1'))));
+  await t('NV liệt kê báo cáo khai thác của mình', assertSucceeds(getDocs(query(collection(kho, 'salesReports'), where('storeCode', '==', '1234'), where('uid', '==', 'kho'), where('date', '>=', yesterday)))));
+  await t('NV không xem báo cáo khai thác người khác', assertFails(getDoc(doc(thungan, 'salesReports/s1'))));
+  await t('NV không liệt kê khai thác toàn kho', assertFails(getDocs(query(collection(thungan, 'salesReports'), where('storeCode', '==', '1234'), where('date', '==', today)))));
+  await t('QL xem khai thác toàn kho theo ngày', assertSucceeds(getDocs(query(collection(mgr, 'salesReports'), where('storeCode', '==', '1234'), where('date', '==', today)))));
+  await t('QL kho khác không xem khai thác kho này', assertFails(getDoc(doc(mgr2, 'salesReports/s1'))));
+  await t('NV sửa báo cáo khai thác trong ngày', assertSucceeds(setDoc(doc(kho, 'salesReports/s1'), sr('kho', { revenue: 13, updatedAt: now + 1000 }))));
+  await t('NV không đổi người báo cáo khi sửa', assertFails(updateDoc(doc(kho, 'salesReports/s1'), { uid: 'thungan' })));
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'salesReports/old'), sr('kho', { date: yesterday, createdAt: now - 86400000 }));
+    await setDoc(doc(db, `salesDaily/1234_${today}_kho`), { storeCode: '1234', uid: 'kho', date: today, orders: 1, rev100: 1300 });
+    await setDoc(doc(db, `salesStoreDaily/1234_${today}`), { storeCode: '1234', date: today, orders: 1, rev100: 1300 });
+    await setDoc(doc(db, `salesRanks/1234_${today.slice(0, 7)}`), { storeCode: '1234', ym: today.slice(0, 7), ranks: { kho: 1 }, total: 1 });
+  });
+  await t('NV không sửa báo cáo ngày cũ', assertFails(updateDoc(doc(kho, 'salesReports/old'), { revenue: 99 })));
+  await t('NV không xoá báo cáo ngày cũ', assertFails(deleteDoc(doc(kho, 'salesReports/old'))));
+  await t('QL sửa báo cáo ngày cũ', assertSucceeds(updateDoc(doc(mgr, 'salesReports/old'), { revenue: 9, updatedAt: now })));
+  await t('NV xem số liệu ngày của mình', assertSucceeds(getDoc(doc(kho, `salesDaily/1234_${today}_kho`))));
+  await t('NV khác không xem số liệu của người khác', assertFails(getDoc(doc(thungan, `salesDaily/1234_${today}_kho`))));
+  await t('NV không xem số liệu toàn kho', assertFails(getDoc(doc(kho, `salesStoreDaily/1234_${today}`))));
+  await t('QL xem số liệu toàn kho', assertSucceeds(getDoc(doc(mgr, `salesStoreDaily/1234_${today}`))));
+  await t('NV xem thứ hạng tháng', assertSucceeds(getDoc(doc(thungan, `salesRanks/1234_${today.slice(0, 7)}`))));
+  await t('Không ai tự ghi số liệu cộng dồn', assertFails(setDoc(doc(mgr, `salesDaily/1234_${today}_mgr`), { storeCode: '1234', uid: 'mgr', orders: 99 })));
+  await t('QL chỉnh danh mục khai thác của kho', assertSucceeds(updateDoc(doc(mgr, 'stores/1234'), { salesCatalog: [{ key: 'main', name: 'SP chính', items: [{ key: 'tivi', name: 'Tivi' }] }] })));
+  await t('NV không chỉnh danh mục khai thác', assertFails(updateDoc(doc(kho, 'stores/1234'), { salesCatalog: [] })));
+  await t('NV tự xoá báo cáo trong ngày', assertSucceeds(deleteDoc(doc(kho, 'salesReports/s1'))));
+
   console.log(`\n${pass} đạt, ${fail} lỗi`);
   await env.cleanup();
   process.exit(fail ? 1 : 0);

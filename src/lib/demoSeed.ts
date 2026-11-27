@@ -1,8 +1,9 @@
 // Dữ liệu mẫu cho chế độ xem thử. Tên người và mã kho đều là giả lập.
 import { CRITERIA } from './criteria';
 import { defaultStore } from './constants';
-import { addDays, now, vnAt, vnDate } from './time';
-import type { Area, Leave, Post, Report, Task, UserProfile } from './types';
+import { addDays, now, vnAt, vnDate, vnTime } from './time';
+import { contribOf, DEFAULT_CATALOG, emptyDraft, salesText, sumAggs, summarize } from './sales';
+import type { Area, Leave, Post, Report, SalesReport, Task, UserProfile } from './types';
 
 type Doc = Record<string, unknown> & { id: string };
 
@@ -339,6 +340,90 @@ export function seedDemo(): Record<string, Record<string, Doc>> {
     expected: 13041500, diff: 18 * 500000 + 12 * 200000 + 9 * 100000 + 6 * 50000 + 15 * 20000 + 8 * 10000 + 4 * 5000 + 1500 - 13041500,
     note: '@Lê Hoàng Nam mượn 200.000 mua văn phòng phẩm', mentions: ['u-nam'], createdBy: 'u-lan', createdByName: 'Nguyễn Thị Lan',
     createdAt: vnAt(today, '13:58'), date: today,
+  });
+
+  // Báo cáo khai thác mẫu: 21 ngày gần nhất, mỗi người bán 0–5 đơn/ngày
+  const sellers = ['u-nam', 'u-mai', 'u-khoa', 'u-tram', 'u-tu', 'u-vy', 'u-quan'];
+  const pick = <T,>(arr: T[]) => arr[Math.floor(r() * arr.length)];
+  const allReports: SalesReport[] = [];
+  for (let back = 20; back >= 0; back--) {
+    const date = addDays(today, -back);
+    for (const uid of sellers) {
+      const n = Math.floor(r() * (uid === 'u-quan' ? 2 : 6));
+      for (let k = 0; k < n; k++) {
+        const hh = 9 + Math.floor(r() * 12);
+        const at = vnAt(date, `${String(hh).padStart(2, '0')}:${String(Math.floor(r() * 60)).padStart(2, '0')}`);
+        if (at > t) continue;
+        const draft = emptyDraft();
+        const main = pick(DEFAULT_CATALOG[0].items);
+        draft.items[main.key] = 1;
+        let revenue = [6.5, 8.9, 12.4, 15.9, 9.5, 21.9, 4.8, 32][Math.floor(r() * 8)];
+        if (r() < 0.45) draft.items[pick(DEFAULT_CATALOG[2].items).key] = 1 + Math.floor(r() * 2);
+        if (r() < 0.35) draft.items.sim = 1;
+        if (r() < 0.4) draft.amounts[pick(['bh_roi_vo', 'bh_mo_rong'])] = [0.5, 0.8, 1.2, 1.6][Math.floor(r() * 4)];
+        if (r() < 0.3) {
+          draft.items[pick(DEFAULT_CATALOG[3].items).key] = 1;
+          revenue += 1.9;
+        }
+        if (r() < 0.3) draft.items[pick(DEFAULT_CATALOG[4].items).key] = 1;
+        draft.revenueExpr = String(Math.round(revenue * 10) / 10).replace('.', ',');
+        draft.flags = { traGop: r() < 0.3, moVi: r() < 0.25, chienGia: r() < 0.15 };
+        const sum = summarize(draft, DEFAULT_CATALOG);
+        const u = people.find((x) => x[0] === uid)!;
+        const rep: SalesReport = {
+          id: `sr-${date}-${uid}-${k}`,
+          storeCode: STORE,
+          uid,
+          userName: u[1],
+          userCode: (u[2].userCode as string) || null,
+          date,
+          createdAt: at,
+          updatedAt: at,
+          revenue: sum.revenue,
+          revenueExpr: draft.revenueExpr,
+          flags: draft.flags,
+          items: sum.items,
+          amounts: sum.amounts,
+          extras: [],
+          names: sum.names,
+          groupOf: Object.fromEntries(Object.keys({ ...sum.items, ...sum.amounts }).map((x) => [x, sum.groupOf[x]])),
+          groupQty: sum.groupQty,
+          qty: sum.qty,
+          note: '',
+          mentions: [],
+          text: salesText(sum, draft, DEFAULT_CATALOG, { userCode: u[2].userCode as string, userName: u[1], storeCode: STORE, at, timeText: `${vnTime(at)} · ${date.slice(8)}/${date.slice(5, 7)}/${date.slice(0, 4)}` }),
+        };
+        allReports.push(rep);
+        put('salesReports', rep as unknown as Doc);
+      }
+    }
+  }
+  // Số liệu cộng dồn (bản chạy thật do máy chủ tính)
+  const dayMap = new Map<string, SalesReport[]>();
+  allReports.forEach((x) => dayMap.set(`${x.date}_${x.uid}`, [...(dayMap.get(`${x.date}_${x.uid}`) || []), x]));
+  const daily: Doc[] = [];
+  dayMap.forEach((rs) => {
+    const x = rs[0];
+    const d = { ...sumAggs(rs.map(contribOf)), id: `${STORE}_${x.date}_${x.uid}`, storeCode: STORE, uid: x.uid, date: x.date, ym: x.date.slice(0, 7), userName: x.userName, userCode: x.userCode, updatedAt: t } as unknown as Doc;
+    daily.push(d);
+    put('salesDaily', d);
+  });
+  const months = new Map<string, Doc[]>();
+  daily.forEach((d) => months.set(`${d.ym}_${d.uid}`, [...(months.get(`${d.ym}_${d.uid}`) || []), d]));
+  const monthly: Doc[] = [];
+  months.forEach((ds) => {
+    const x = ds[0];
+    const m = { ...sumAggs(ds as never[]), id: `${STORE}_${x.ym}_${x.uid}`, storeCode: STORE, uid: x.uid, ym: x.ym, userName: x.userName, userCode: x.userCode, updatedAt: t } as unknown as Doc;
+    monthly.push(m);
+    put('salesMonthly', m);
+  });
+  const storeDays = new Map<string, Doc[]>();
+  daily.forEach((d) => storeDays.set(d.date as string, [...(storeDays.get(d.date as string) || []), d]));
+  storeDays.forEach((ds, date) => put('salesStoreDaily', { ...sumAggs(ds as never[]), id: `${STORE}_${date}`, storeCode: STORE, date, ym: date.slice(0, 7), updatedAt: t } as unknown as Doc));
+  const yms = new Set(monthly.map((m) => m.ym as string));
+  yms.forEach((ym) => {
+    const sorted = monthly.filter((m) => m.ym === ym).sort((a, b) => (b.rev100 as number) - (a.rev100 as number));
+    put('salesRanks', { id: `${STORE}_${ym}`, storeCode: STORE, ym, ranks: Object.fromEntries(sorted.map((m, i) => [m.uid as string, i + 1])), total: sorted.length, updatedAt: t } as unknown as Doc);
   });
 
   void vnAt;

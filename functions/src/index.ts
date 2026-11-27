@@ -524,6 +524,134 @@ async function storeRoutines(now: number) {
   }
 }
 
+// ---------------- Báo cáo khai thác: cộng dồn số liệu ----------------
+// Tính lại từ đầu (không cộng dồn tăng dần) nên chạy lại nhiều lần vẫn đúng: ngày của người → tháng của người,
+// ngày của kho, thứ hạng tháng.
+type SalesDoc = {
+  storeCode: string;
+  uid: string;
+  userName?: string;
+  userCode?: string | null;
+  date: string;
+  revenue?: number;
+  qty?: number;
+  groupQty?: Record<string, number>;
+  items?: Record<string, number>;
+  amounts?: Record<string, number>;
+  names?: Record<string, string>;
+  flags?: { traGop?: boolean; moVi?: boolean; chienGia?: boolean };
+};
+type Agg = {
+  orders: number;
+  rev100: number;
+  qty: number;
+  groupQty: Record<string, number>;
+  items: Record<string, number>;
+  amounts100: Record<string, number>;
+  names: Record<string, string>;
+  flags: Record<string, number>;
+  attach: Record<string, number>;
+};
+const emptyAgg = (): Agg => ({
+  orders: 0,
+  rev100: 0,
+  qty: 0,
+  groupQty: {},
+  items: {},
+  amounts100: {},
+  names: {},
+  flags: { traGop: 0, moVi: 0, chienGia: 0 },
+  attach: { main: 0, accessory: 0, insurance: 0, sim: 0, vas: 0, appliance: 0 },
+});
+function aggOfReport(r: SalesDoc): Agg {
+  const a = emptyAgg();
+  const g = r.groupQty || {};
+  const main = (g.main || 0) > 0;
+  a.orders = 1;
+  a.rev100 = Math.round((r.revenue || 0) * 100);
+  a.qty = r.qty || 0;
+  a.groupQty = { ...g };
+  a.items = { ...(r.items || {}) };
+  a.amounts100 = Object.fromEntries(Object.entries(r.amounts || {}).map(([k, v]) => [k, Math.round(v * 100)]));
+  a.names = { ...(r.names || {}) };
+  a.flags = { traGop: r.flags?.traGop ? 1 : 0, moVi: r.flags?.moVi ? 1 : 0, chienGia: r.flags?.chienGia ? 1 : 0 };
+  a.attach = {
+    main: main ? 1 : 0,
+    accessory: main && (g.accessory || 0) > 0 ? 1 : 0,
+    insurance: main && Object.keys(r.amounts || {}).length > 0 ? 1 : 0,
+    sim: main && (r.items?.sim || 0) > 0 ? 1 : 0,
+    vas: main && (g.vas || 0) > 0 ? 1 : 0,
+    appliance: main && (g.appliance || 0) > 0 ? 1 : 0,
+  };
+  return a;
+}
+function addAgg(into: Agg, b: Partial<Agg>): Agg {
+  const add = (x: Record<string, number>, y?: Record<string, number>) => {
+    for (const [k, v] of Object.entries(y || {})) x[k] = (x[k] || 0) + (v || 0);
+  };
+  into.orders += b.orders || 0;
+  into.rev100 += b.rev100 || 0;
+  into.qty += b.qty || 0;
+  add(into.groupQty, b.groupQty);
+  add(into.items, b.items);
+  add(into.amounts100, b.amounts100);
+  Object.assign(into.names, b.names || {});
+  add(into.flags, b.flags);
+  add(into.attach, b.attach);
+  return into;
+}
+
+/**
+ * Ghi số liệu cộng dồn an toàn khi nhiều báo cáo đến cùng lúc: chỉ ghi nếu dựa trên lần đọc mới hơn
+ * bản đang có (basedOn), tránh lần tính cũ ghi đè lần tính mới. Không xoá tài liệu (ghi số 0) để
+ * lần tính cũ không thể tạo lại số liệu đã lỗi thời.
+ */
+async function guardedSet(path: string, basedOn: number, data: Record<string, unknown>) {
+  const ref = db.doc(path);
+  await db.runTransaction(async (tx) => {
+    const cur = await tx.get(ref);
+    if (cur.exists && (Number(cur.get('basedOn')) || 0) > basedOn) return;
+    tx.set(ref, { ...data, basedOn, updatedAt: Date.now() });
+  });
+}
+
+async function recomputeSales(storeCode: string, uid: string, date: string) {
+  const ym = date.slice(0, 7);
+  let at = Date.now();
+  const reports = await db.collection('salesReports').where('storeCode', '==', storeCode).where('uid', '==', uid).where('date', '==', date).get();
+  const who = (reports.docs[0]?.data() as SalesDoc | undefined) || null;
+  const day = reports.docs.reduce((acc, d) => addAgg(acc, aggOfReport(d.data() as SalesDoc)), emptyAgg());
+  await guardedSet(`salesDaily/${storeCode}_${date}_${uid}`, at, { ...day, storeCode, uid, date, ym, ...(who ? { userName: who.userName || '', userCode: who.userCode || null } : {}) });
+
+  at = Date.now();
+  const days = await db.collection('salesDaily').where('storeCode', '==', storeCode).where('uid', '==', uid).where('ym', '==', ym).get();
+  const named = days.docs.map((d) => d.data()).find((x) => x.userName);
+  const m = days.docs.reduce((acc, d) => addAgg(acc, d.data() as Agg), emptyAgg());
+  await guardedSet(`salesMonthly/${storeCode}_${ym}_${uid}`, at, { ...m, storeCode, uid, ym, userName: named?.userName || '', userCode: named?.userCode || null });
+
+  at = Date.now();
+  const storeDays = await db.collection('salesDaily').where('storeCode', '==', storeCode).where('date', '==', date).get();
+  const sd = storeDays.docs.reduce((acc, d) => addAgg(acc, d.data() as Agg), emptyAgg());
+  await guardedSet(`salesStoreDaily/${storeCode}_${date}`, at, { ...sd, storeCode, date, ym });
+
+  at = Date.now();
+  const months = await db.collection('salesMonthly').where('storeCode', '==', storeCode).where('ym', '==', ym).get();
+  const sorted = months.docs
+    .map((d) => d.data())
+    .filter((x) => (x.orders || 0) > 0)
+    .sort((a, b) => (b.rev100 || 0) - (a.rev100 || 0));
+  await guardedSet(`salesRanks/${storeCode}_${ym}`, at, { storeCode, ym, ranks: Object.fromEntries(sorted.map((x, i) => [x.uid, i + 1])), total: sorted.length });
+}
+
+export const onSalesReportWritten = onDocumentWritten('salesReports/{id}', async (event) => {
+  const before = event.data?.before.data() as SalesDoc | undefined;
+  const after = event.data?.after.data() as SalesDoc | undefined;
+  const r = after || before;
+  if (!r?.storeCode || !r.uid || !r.date) return;
+  await recomputeSales(r.storeCode, r.uid, r.date);
+  if (before && after && (before.date !== after.date || before.uid !== after.uid)) await recomputeSales(before.storeCode, before.uid, before.date);
+});
+
 export const every5Minutes = onSchedule({ schedule: 'every 5 minutes', timeZone: 'Asia/Ho_Chi_Minh', retryCount: 0 }, async () => {
   const now = Date.now();
   await Promise.all([

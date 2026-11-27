@@ -6,6 +6,7 @@ import { CashCountScreen } from '../cash/CashCount';
 import { HandoverSheet } from '../handover/Handover';
 import { RollcallListScreen, QuickTile, myPendingRollcalls } from '../rollcall/Rollcall';
 import { TaskEditor } from '../tasks/TaskEditor';
+import { SalesScreen } from '../sales/Sales';
 
 /** Thao tác nhanh dùng hằng ngày */
 export function QuickActions() {
@@ -18,6 +19,7 @@ export function QuickActions() {
     <Section>
       <div className="quick">
         <QuickTile icon="banknote" color="green" label="Kiểm quỹ" onClick={() => nav.push(<CashCountScreen />)} />
+        <QuickTile icon="chart" color="teal" label="Khai thác" onClick={() => nav.push(<SalesScreen />)} />
         <QuickTile icon="handover" color="orange" label="Bàn giao ca" onClick={() => ui.sheet((c) => <HandoverSheet close={c} />)} />
         <QuickTile icon="hand" color="indigo" label="Điểm danh" badge={pending} onClick={() => nav.push(<RollcallListScreen />)} />
         <QuickTile icon="compose" color="blue" label="Giao việc" onClick={() => ui.sheet((c) => <TaskEditor close={c} />)} />
